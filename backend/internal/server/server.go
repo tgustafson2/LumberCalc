@@ -1,0 +1,239 @@
+package server
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"net"
+	"net/http"
+	"time"
+)
+
+type Deps struct {
+	Log   *slog.Logger
+	Ready []Check
+	V1    http.Handler
+}
+
+type Check struct {
+	Name  string
+	Probe func(context.Context) error
+}
+
+const readyTimeout = 2 * time.Second
+const shutdownGrace = 10 * time.Second
+
+func New(d Deps) (http.Handler, error) {
+	if d.Log == nil {
+		return nil, errors.New("log is required")
+	}
+	if len(d.Ready) == 0 {
+		return nil, errors.New("ready checks are required")
+	}
+	seen := make(map[string]struct{}, len(d.Ready))
+	for _, c := range d.Ready {
+		if c.Name == "" {
+			return nil, errors.New("check name is required")
+		}
+		if c.Probe == nil {
+			return nil, fmt.Errorf("check %q has nil probe", c.Name)
+		}
+		if _, ok := seen[c.Name]; ok {
+			return nil, fmt.Errorf("duplicate check name %q", c.Name)
+		}
+		seen[c.Name] = struct{}{}
+	}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /healthz", healthz)
+	mux.Handle("GET /readyz", readyz(d.Ready, d.Log))
+	if d.V1 != nil {
+		mux.Handle("/v1/", d.V1)
+	}
+	mux.HandleFunc("/", notFound)
+
+	return requestID(accessLog(d.Log, recoverPanic(d.Log, mux))), nil
+}
+
+func Serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) error {
+	srv := &http.Server{
+		Addr:              addr,
+		Handler:           h,
+		ReadHeaderTimeout: 5 * time.Second,
+		ErrorLog:          slog.NewLogLogger(log.Handler(), slog.LevelError),
+	}
+
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	errc := make(chan error, 1)
+	go func() {
+		errc <- srv.Serve(ln)
+	}()
+
+	log.Info("listening", "addr", addr)
+
+	select {
+	case err := <-errc:
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	case <-ctx.Done():
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			return err
+		}
+		err := <-errc
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
+}
+
+func NewLogger(w io.Writer, level slog.Level) *slog.Logger {
+	return slog.New(ctxHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})})
+}
+
+type checkResult struct {
+	Name string `json:"name"`
+	OK   bool   `json:"ok"`
+}
+
+type readyBody struct {
+	Status string        `json:"status"`
+	Checks []checkResult `json:"checks"`
+}
+
+func healthz(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func readyz(checks []Check, log *slog.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
+		defer cancel()
+
+		results := make([]checkResult, len(checks))
+		ready := true
+		for i, c := range checks {
+			err := c.Probe(ctx)
+			ok := err == nil
+			results[i] = checkResult{Name: c.Name, OK: ok}
+			if !ok {
+				ready = false
+				log.WarnContext(r.Context(), "readiness check failed", "check", c.Name)
+			}
+		}
+
+		status := http.StatusOK
+		bodyStatus := "ready"
+		if !ready {
+			status = http.StatusServiceUnavailable
+			bodyStatus = "not_ready"
+		}
+		writeJSON(w, status, readyBody{Status: bodyStatus, Checks: results})
+	})
+}
+
+func notFound(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+}
+
+func writeJSON(w http.ResponseWriter, status int, body any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(body)
+}
+
+func requestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := newRequestID()
+		ctx := context.WithValue(r.Context(), ctxKey{}, id)
+		w.Header().Set("X-Request-Id", id)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func newRequestID() string {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return hex.EncodeToString([]byte(fmt.Sprintf("%d", time.Now().UnixNano())))
+	}
+	return hex.EncodeToString(b[:])
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+	bytes  int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
+func (r *statusRecorder) Write(p []byte) (int, error) {
+	if r.status == 0 {
+		r.status = http.StatusOK
+	}
+	n, err := r.ResponseWriter.Write(p)
+	r.bytes += n
+	return n, err
+}
+
+func accessLog(log *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		next.ServeHTTP(rec, r)
+		log.InfoContext(r.Context(), "request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", rec.status,
+			"bytes", rec.bytes,
+			"duration", time.Since(start).String(),
+		)
+	})
+}
+
+func recoverPanic(log *slog.Logger, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.ErrorContext(r.Context(), "handler panic")
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+type ctxKey struct{}
+
+type ctxHandler struct{ slog.Handler }
+
+func (h ctxHandler) Handle(ctx context.Context, r slog.Record) error {
+	if id, ok := ctx.Value(ctxKey{}).(string); ok && id != "" {
+		r.AddAttrs(slog.String("request_id", id))
+	}
+	return h.Handler.Handle(ctx, r)
+}
+
+func (h ctxHandler) WithAttrs(as []slog.Attr) slog.Handler {
+	return ctxHandler{h.Handler.WithAttrs(as)}
+}
+
+func (h ctxHandler) WithGroup(name string) slog.Handler {
+	return ctxHandler{h.Handler.WithGroup(name)}
+}
