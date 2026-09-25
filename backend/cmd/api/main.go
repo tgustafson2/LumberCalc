@@ -9,6 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"lumbercalc/backend/db"
 	"lumbercalc/backend/internal/config"
 	"lumbercalc/backend/internal/server"
 )
@@ -35,8 +36,11 @@ func run(ctx context.Context) error {
 	}
 	defer pool.Close()
 	h, err := server.New(server.Deps{
-		Log:   log,
-		Ready: []server.Check{{Name: "postgres", Probe: pool.Ping}},
+		Log: log,
+		Ready: []server.Check{
+			{Name: "postgres", Probe: pool.Ping},
+			{Name: "migrations", Probe: func(ctx context.Context) error { return db.CheckApplied(ctx, pool) }},
+		},
 	})
 	if err != nil {
 		return err
