@@ -1,3 +1,5 @@
+// Package server is the HTTP process.
+// /healthz and /readyz are public. /v1/ is mounted only when Deps.V1 is set.
 package server
 
 import (
@@ -14,12 +16,14 @@ import (
 	"time"
 )
 
+// Deps is the logger, the readiness probes, and the optional /v1 handler.
 type Deps struct {
 	Log   *slog.Logger
 	Ready []Check
 	V1    http.Handler
 }
 
+// Check is one readiness probe. Name must be unique and non-empty, and Probe must be non-nil.
 type Check struct {
 	Name  string
 	Probe func(context.Context) error
@@ -28,6 +32,10 @@ type Check struct {
 const readyTimeout = 2 * time.Second
 const shutdownGrace = 10 * time.Second
 
+// New requires a logger and at least one uniquely named check.
+// The chain is request id, then access log, then panic recovery, then the mux.
+// /healthz does not run probes. /readyz runs every probe with a 2 second timeout.
+// A failing probe is 503, and the body lists names and ok flags without the error text.
 func New(d Deps) (http.Handler, error) {
 	if d.Log == nil {
 		return nil, errors.New("log is required")
@@ -60,6 +68,7 @@ func New(d Deps) (http.Handler, error) {
 	return requestID(accessLog(d.Log, recoverPanic(d.Log, mux))), nil
 }
 
+// Serve listens on addr until ctx is canceled, then drains in-flight requests for 10 seconds.
 func Serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) error {
 	srv := &http.Server{
 		Addr:              addr,
@@ -100,6 +109,8 @@ func Serve(ctx context.Context, addr string, h http.Handler, log *slog.Logger) e
 	}
 }
 
+// NewLogger writes JSON and adds request_id when the request-id middleware
+// stored one on the context.
 func NewLogger(w io.Writer, level slog.Level) *slog.Logger {
 	return slog.New(ctxHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})})
 }
@@ -115,7 +126,7 @@ type readyBody struct {
 }
 
 func healthz(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 func readyz(checks []Check, log *slog.Logger) http.Handler {
@@ -141,15 +152,17 @@ func readyz(checks []Check, log *slog.Logger) http.Handler {
 			status = http.StatusServiceUnavailable
 			bodyStatus = "not_ready"
 		}
-		writeJSON(w, status, readyBody{Status: bodyStatus, Checks: results})
+		WriteJSON(w, status, readyBody{Status: bodyStatus, Checks: results})
 	})
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+	WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
 }
 
-func writeJSON(w http.ResponseWriter, status int, body any) {
+// WriteJSON sets Content-Type to application/json, writes status, then encodes body.
+// An encode error is discarded because the status line is already sent.
+func WriteJSON(w http.ResponseWriter, status int, body any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(body)
@@ -212,7 +225,7 @@ func recoverPanic(log *slog.Logger, next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.ErrorContext(r.Context(), "handler panic")
-				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			}
 		}()
 		next.ServeHTTP(w, r)

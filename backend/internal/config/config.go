@@ -1,3 +1,5 @@
+// Package config loads process configuration from a dotenv file and the environment.
+// Load ignores a missing file. A variable set in the process environment overrides the file.
 package config
 
 import (
@@ -11,13 +13,18 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config is validated process configuration.
+// HTTP_ADDR defaults to :8080 and LOG_LEVEL defaults to info.
+// CLERK_AUTHORIZED_PARTIES is required. A blank or comma-only value is rejected.
 type Config struct {
-	HTTPAddr       string
-	LogLevel       slog.Level
-	DatabaseURL    Secret
-	ClerkSecretKey Secret
+	HTTPAddr               string
+	LogLevel               slog.Level
+	DatabaseURL            Secret
+	ClerkSecretKey         Secret
+	ClerkAuthorizedParties []string
 }
 
+// Secret hides a credential from fmt, slog, and JSON. Reveal is the only way to read it.
 type Secret struct {
 	value string
 }
@@ -31,15 +38,39 @@ func (s Secret) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), n
 
 type lookup func(key string) (value string, ok bool)
 
+// Load reads dotenvPath, then lets the process environment override it.
+// A missing file is not an error. Invalid or missing required values come back as one joined error.
 func Load(dotenvPath string) (Config, error) {
+	env, err := readEnv(dotenvPath)
+	if err != nil {
+		return Config{}, err
+	}
+	return parse(env)
+}
+
+// LoadDatabaseURL reads DATABASE_URL with the same file and process rules as Load.
+// Clerk settings are not read. Migrate uses this so a database-only environment can migrate.
+func LoadDatabaseURL(dotenvPath string) (Secret, error) {
+	env, err := readEnv(dotenvPath)
+	if err != nil {
+		return Secret{}, err
+	}
+	dsn, _ := env("DATABASE_URL")
+	if dsn == "" {
+		return Secret{}, errors.New("DATABASE_URL is required")
+	}
+	return Secret{value: dsn}, nil
+}
+
+func readEnv(dotenvPath string) (lookup, error) {
 	fileVars, err := godotenv.Read(dotenvPath)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, os.ErrNotExist) {
-			return Config{}, err
+			return nil, err
 		}
 		fileVars = nil
 	}
-	return parse(layered(os.LookupEnv, fileVars))
+	return layered(os.LookupEnv, fileVars), nil
 }
 
 func parse(env lookup) (Config, error) {
@@ -65,17 +96,45 @@ func parse(env lookup) (Config, error) {
 	}
 
 	clerk, _ := env("CLERK_SECRET_KEY")
+	if clerk == "" {
+		problems = append(problems, errors.New("CLERK_SECRET_KEY is required"))
+	}
+
+	partiesRaw, partiesOK := env("CLERK_AUTHORIZED_PARTIES")
+	parties, partiesErr := clerkParties(partiesRaw, partiesOK)
+	if partiesErr != nil {
+		problems = append(problems, partiesErr)
+	}
 
 	if len(problems) > 0 {
 		return Config{}, errors.Join(problems...)
 	}
 
 	return Config{
-		HTTPAddr:       addr,
-		LogLevel:       level,
-		DatabaseURL:    Secret{value: dsn},
-		ClerkSecretKey: Secret{value: clerk},
+		HTTPAddr:               addr,
+		LogLevel:               level,
+		DatabaseURL:            Secret{value: dsn},
+		ClerkSecretKey:         Secret{value: clerk},
+		ClerkAuthorizedParties: parties,
 	}, nil
+}
+
+func clerkParties(raw string, ok bool) ([]string, error) {
+	if !ok || strings.TrimSpace(raw) == "" {
+		return nil, errors.New("CLERK_AUTHORIZED_PARTIES is required")
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil, errors.New("CLERK_AUTHORIZED_PARTIES is required")
+	}
+	return out, nil
 }
 
 func parseLevel(raw string) (slog.Level, error) {

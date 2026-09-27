@@ -1,3 +1,4 @@
+// Command api loads config, connects to Postgres, and serves HTTP until SIGINT or SIGTERM.
 package main
 
 import (
@@ -10,8 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"lumbercalc/backend/db"
+	"lumbercalc/backend/internal/api"
+	"lumbercalc/backend/internal/clerkauth"
 	"lumbercalc/backend/internal/config"
 	"lumbercalc/backend/internal/server"
+	"lumbercalc/backend/internal/store"
 )
 
 func main() {
@@ -35,12 +39,27 @@ func run(ctx context.Context) error {
 		return err
 	}
 	defer pool.Close()
+	st := store.New(pool)
+	clerk, err := clerkauth.New(cfg.ClerkSecretKey, cfg.ClerkAuthorizedParties, log)
+	if err != nil {
+		return err
+	}
+	v1, err := api.New(api.Deps{
+		Log:          log,
+		Authenticate: clerk.Authenticate,
+		EnsureUser:   st.EnsureUser,
+		DisplayName:  clerk.DisplayName,
+	})
+	if err != nil {
+		return err
+	}
 	h, err := server.New(server.Deps{
 		Log: log,
 		Ready: []server.Check{
 			{Name: "postgres", Probe: pool.Ping},
 			{Name: "migrations", Probe: func(ctx context.Context) error { return db.CheckApplied(ctx, pool) }},
 		},
+		V1: v1,
 	})
 	if err != nil {
 		return err

@@ -1,3 +1,6 @@
+// Command migrate applies the embedded SQL migrations.
+// The -database flag overrides DATABASE_URL. With no flag, LoadDatabaseURL
+// reads that variable from .env and the process environment.
 package main
 
 import (
@@ -29,11 +32,11 @@ func main() {
 
 func run(ctx context.Context, dsn string) error {
 	if dsn == "" {
-		cfg, err := config.Load(".env")
+		secret, err := config.LoadDatabaseURL(".env")
 		if err != nil {
 			return err
 		}
-		dsn = cfg.DatabaseURL.Reveal()
+		dsn = secret.Reveal()
 	}
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
