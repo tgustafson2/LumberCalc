@@ -1,0 +1,6 @@
+---
+alwaysApply: true
+---
+# Never commit changes unless explicitly instructed by the user.
+# Do not run `git commit` or `git add` autonomously.
+# Always ask for permission before performing any git operations.

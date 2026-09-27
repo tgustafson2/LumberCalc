@@ -92,6 +92,59 @@ func TestReadyzNotReadyOmitsError(t *testing.T) {
 	}
 }
 
+func TestReadyzMigrationsFailing(t *testing.T) {
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{
+			{Name: "postgres", Probe: func(context.Context) error { return nil }},
+			{Name: "migrations", Probe: func(context.Context) error {
+				return errors.New("applied_migrations does not exist, run cmd/migrate")
+			}},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	want := `{"status":"not_ready","checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":false}]}`
+	got := strings.TrimSpace(rr.Body.String())
+	if got != want {
+		t.Fatalf("body = %s, want %s", got, want)
+	}
+	if strings.Contains(got, "applied_migrations") {
+		t.Fatalf("body leaked probe error: %s", got)
+	}
+}
+
+func TestReadyzChecksRenderInOrder(t *testing.T) {
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{
+			{Name: "postgres", Probe: func(context.Context) error { return nil }},
+			{Name: "migrations", Probe: func(context.Context) error { return nil }},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d", rr.Code)
+	}
+	want := `{"status":"ready","checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":true}]}`
+	got := strings.TrimSpace(rr.Body.String())
+	if got != want {
+		t.Fatalf("body = %s, want %s", got, want)
+	}
+}
+
 func TestRequestIDMinted(t *testing.T) {
 	h, err := New(Deps{
 		Log: NewLogger(io.Discard, slog.LevelInfo),
