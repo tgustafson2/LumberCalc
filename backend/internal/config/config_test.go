@@ -36,8 +36,9 @@ func TestParseMissingDatabaseURL(t *testing.T) {
 func TestParseHTTPAddrInvalidOmitsValue(t *testing.T) {
 	const bad = "secret-host-without-port"
 	_, err := parse(lookupMap(map[string]string{
-		"DATABASE_URL": "postgres://localhost/db",
-		"HTTP_ADDR":    bad,
+		"DATABASE_URL":     "postgres://localhost/db",
+		"CLERK_SECRET_KEY": "sk_test_config",
+		"HTTP_ADDR":        bad,
 	}))
 	if err == nil {
 		t.Fatal("expected error")
@@ -75,10 +76,14 @@ func TestConfigLogOmitsSecrets(t *testing.T) {
 
 func TestParseHTTPAddrDefault(t *testing.T) {
 	cfg, err := parse(func(key string) (string, bool) {
-		if key == "DATABASE_URL" {
+		switch key {
+		case "DATABASE_URL":
 			return "postgres://localhost:5432/lumbercalc?sslmode=disable", true
+		case "CLERK_SECRET_KEY":
+			return "sk_test_config", true
+		default:
+			return "", false
 		}
-		return "", false
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -91,8 +96,9 @@ func TestParseHTTPAddrDefault(t *testing.T) {
 func TestParseLogLevel(t *testing.T) {
 	t.Run("debug", func(t *testing.T) {
 		cfg, err := parse(lookupMap(map[string]string{
-			"DATABASE_URL": "postgres://localhost/db",
-			"LOG_LEVEL":    "debug",
+			"DATABASE_URL":     "postgres://localhost/db",
+			"CLERK_SECRET_KEY": "sk_test_config",
+			"LOG_LEVEL":        "debug",
 		}))
 		if err != nil {
 			t.Fatal(err)
@@ -103,7 +109,8 @@ func TestParseLogLevel(t *testing.T) {
 	})
 	t.Run("empty", func(t *testing.T) {
 		cfg, err := parse(lookupMap(map[string]string{
-			"DATABASE_URL": "postgres://localhost/db",
+			"DATABASE_URL":     "postgres://localhost/db",
+			"CLERK_SECRET_KEY": "sk_test_config",
 		}))
 		if err != nil {
 			t.Fatal(err)
@@ -114,8 +121,9 @@ func TestParseLogLevel(t *testing.T) {
 	})
 	t.Run("invalid", func(t *testing.T) {
 		_, err := parse(lookupMap(map[string]string{
-			"DATABASE_URL": "postgres://localhost/db",
-			"LOG_LEVEL":    "nope",
+			"DATABASE_URL":     "postgres://localhost/db",
+			"CLERK_SECRET_KEY": "sk_test_config",
+			"LOG_LEVEL":        "nope",
 		}))
 		if err == nil {
 			t.Fatal("expected error")
@@ -156,6 +164,7 @@ func TestSecretRedaction(t *testing.T) {
 
 func TestLoadMissingDotenv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://localhost:5432/lumbercalc?sslmode=disable")
+	t.Setenv("CLERK_SECRET_KEY", "sk_test_config")
 	cfg, err := Load(filepath.Join(t.TempDir(), "does-not-exist.env"))
 	if err != nil {
 		t.Fatal(err)
@@ -174,6 +183,7 @@ func TestProcessEnvWinsOverDotenv(t *testing.T) {
 	}
 	t.Setenv("DATABASE_URL", "postgres://env/db")
 	t.Setenv("HTTP_ADDR", ":7777")
+	t.Setenv("CLERK_SECRET_KEY", "sk_test_config")
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -184,6 +194,74 @@ func TestProcessEnvWinsOverDotenv(t *testing.T) {
 	if cfg.HTTPAddr != ":7777" {
 		t.Fatalf("HTTPAddr = %q, want :7777", cfg.HTTPAddr)
 	}
+}
+
+func TestParseMissingClerkSecretKey(t *testing.T) {
+	const secret = "sk_test_should_not_leak"
+	_, err := parse(func(key string) (string, bool) {
+		switch key {
+		case "DATABASE_URL":
+			return "postgres://localhost/db", true
+		case "CLERK_SECRET_KEY":
+			return "", true
+		case "CLERK_AUTHORIZED_PARTIES":
+			return secret, true
+		default:
+			return "", false
+		}
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, "CLERK_SECRET_KEY") {
+		t.Fatalf("error %q missing CLERK_SECRET_KEY", msg)
+	}
+	if strings.Contains(msg, secret) {
+		t.Fatalf("error %q leaked secret", msg)
+	}
+}
+
+func TestParseClerkAuthorizedParties(t *testing.T) {
+	t.Run("default", func(t *testing.T) {
+		cfg, err := parse(lookupMap(map[string]string{
+			"DATABASE_URL":     "postgres://localhost/db",
+			"CLERK_SECRET_KEY": "sk_test_config",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.ClerkAuthorizedParties) != 1 || cfg.ClerkAuthorizedParties[0] != "http://localhost:5173" {
+			t.Fatalf("parties = %#v", cfg.ClerkAuthorizedParties)
+		}
+	})
+	t.Run("blank", func(t *testing.T) {
+		cfg, err := parse(lookupMap(map[string]string{
+			"DATABASE_URL":             "postgres://localhost/db",
+			"CLERK_SECRET_KEY":         "sk_test_config",
+			"CLERK_AUTHORIZED_PARTIES": "   ",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.ClerkAuthorizedParties) != 1 || cfg.ClerkAuthorizedParties[0] != "http://localhost:5173" {
+			t.Fatalf("parties = %#v", cfg.ClerkAuthorizedParties)
+		}
+	})
+	t.Run("list", func(t *testing.T) {
+		cfg, err := parse(lookupMap(map[string]string{
+			"DATABASE_URL":             "postgres://localhost/db",
+			"CLERK_SECRET_KEY":         "sk_test_config",
+			"CLERK_AUTHORIZED_PARTIES": "http://localhost:5173, https://lumber.example",
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := cfg.ClerkAuthorizedParties
+		if len(got) != 2 || got[0] != "http://localhost:5173" || got[1] != "https://lumber.example" {
+			t.Fatalf("parties = %#v", got)
+		}
+	})
 }
 
 func lookupMap(m map[string]string) lookup {

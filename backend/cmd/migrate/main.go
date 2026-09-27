@@ -1,3 +1,6 @@
+// Command migrate applies the embedded SQL migrations.
+// The -database flag overrides DATABASE_URL. With no flag, Load reads .env
+// the same way the API does.
 package main
 
 import (

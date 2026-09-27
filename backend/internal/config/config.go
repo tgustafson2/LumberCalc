@@ -1,3 +1,5 @@
+// Package config loads process configuration from a dotenv file and the environment.
+// Load ignores a missing file. A variable set in the process environment overrides the file.
 package config
 
 import (
@@ -11,13 +13,19 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config is validated process configuration.
+// HTTP_ADDR defaults to :8080 and LOG_LEVEL defaults to info.
+// ClerkAuthorizedParties defaults to http://localhost:5173 when the variable
+// is unset, blank, or only commas.
 type Config struct {
-	HTTPAddr       string
-	LogLevel       slog.Level
-	DatabaseURL    Secret
-	ClerkSecretKey Secret
+	HTTPAddr               string
+	LogLevel               slog.Level
+	DatabaseURL            Secret
+	ClerkSecretKey         Secret
+	ClerkAuthorizedParties []string
 }
 
+// Secret hides a credential from fmt, slog, and JSON. Reveal is the only way to read it.
 type Secret struct {
 	value string
 }
@@ -31,6 +39,8 @@ func (s Secret) MarshalJSON() ([]byte, error) { return []byte(`"[redacted]"`), n
 
 type lookup func(key string) (value string, ok bool)
 
+// Load reads dotenvPath, then lets the process environment override it.
+// A missing file is not an error. Invalid or missing required values come back as one joined error.
 func Load(dotenvPath string) (Config, error) {
 	fileVars, err := godotenv.Read(dotenvPath)
 	if err != nil {
@@ -65,17 +75,43 @@ func parse(env lookup) (Config, error) {
 	}
 
 	clerk, _ := env("CLERK_SECRET_KEY")
+	if clerk == "" {
+		problems = append(problems, errors.New("CLERK_SECRET_KEY is required"))
+	}
+
+	partiesRaw, partiesOK := env("CLERK_AUTHORIZED_PARTIES")
 
 	if len(problems) > 0 {
 		return Config{}, errors.Join(problems...)
 	}
 
 	return Config{
-		HTTPAddr:       addr,
-		LogLevel:       level,
-		DatabaseURL:    Secret{value: dsn},
-		ClerkSecretKey: Secret{value: clerk},
+		HTTPAddr:               addr,
+		LogLevel:               level,
+		DatabaseURL:            Secret{value: dsn},
+		ClerkSecretKey:         Secret{value: clerk},
+		ClerkAuthorizedParties: clerkParties(partiesRaw, partiesOK),
 	}, nil
+}
+
+const defaultClerkParty = "http://localhost:5173"
+
+func clerkParties(raw string, ok bool) []string {
+	if !ok || strings.TrimSpace(raw) == "" {
+		return []string{defaultClerkParty}
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return []string{defaultClerkParty}
+	}
+	return out
 }
 
 func parseLevel(raw string) (slog.Level, error) {
