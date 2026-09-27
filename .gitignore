@@ -1,2 +1,6 @@
 backend/.env
 frontend/.env
+
+.arena/*
+.cursor/*
+sprints/*
