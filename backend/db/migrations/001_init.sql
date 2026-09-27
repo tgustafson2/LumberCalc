@@ -72,6 +72,22 @@ CREATE TABLE design_material_usages (
 );
 CREATE INDEX design_material_usages_material_id_idx ON design_material_usages (material_id);
 
+-- Usages of this user's designs are deleted by the design cascade, which is
+-- still queued when the material RESTRICT check runs. Remove them first.
+-- A usage on someone else's design still RESTRICTs.
+CREATE FUNCTION users_clear_own_usages() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    DELETE FROM design_material_usages AS u
+    USING designs AS d
+    WHERE u.design_id = d.id AND d.owner_id = OLD.id;
+    RETURN OLD;
+END $$;
+
+CREATE TRIGGER users_clear_own_usages
+    BEFORE DELETE ON users
+    FOR EACH ROW EXECUTE FUNCTION users_clear_own_usages();
+
 -- One row per source design, ever. Unpublish flips is_public. No soft delete.
 -- The composite FK makes "publisher is the design's owner" impossible to violate.
 CREATE TABLE patterns (
