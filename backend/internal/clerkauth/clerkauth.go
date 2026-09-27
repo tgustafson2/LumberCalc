@@ -65,8 +65,8 @@ func New(secret config.Secret, authorizedParties []string, log *slog.Logger) (*C
 // Authenticate reads a Bearer token and verifies it with Clerk's JWKS.
 // azp must equal a party passed to New. A blank azp is rejected.
 // A bad session, including an unknown signing key, returns ErrUnauthenticated.
-// A JWKS outage is returned unchanged. Unknown key ids cause at most one JWKS fetch per minute.
-// The log records a reason and omits the token.
+// A JWKS outage is returned unchanged. Each unknown key id is fetched at most once a minute.
+// A different key id is fetched on the next request. The log records a reason and omits the token.
 func (c *Clerk) Authenticate(r *http.Request) (store.ClerkUserID, error) {
 	token, ok := bearer(r.Header.Get("Authorization"))
 	if !ok {
@@ -197,7 +197,7 @@ type cachedKey struct {
 type keyCache struct {
 	mu       sync.Mutex
 	positive map[string]cachedKey
-	missedAt time.Time
+	missed   map[string]time.Time
 	fetch    keyFetch
 	now      func() time.Time
 }
@@ -205,6 +205,7 @@ type keyCache struct {
 func newKeyCache(fetch keyFetch) *keyCache {
 	return &keyCache{
 		positive: map[string]cachedKey{},
+		missed:   map[string]time.Time{},
 		fetch:    fetch,
 		now:      time.Now,
 	}
@@ -218,25 +219,28 @@ func (k *keyCache) get(ctx context.Context, kid string) (*clerk.JSONWebKey, erro
 		k.mu.Unlock()
 		return key, nil
 	}
-	// Reserve the window before the fetch. A second kid in that minute must not call Clerk.
-	if !k.missedAt.IsZero() && now.Sub(k.missedAt) < missWindow {
+	// This key id already missed. A different key id still fetches.
+	if missedAt, ok := k.missed[kid]; ok && now.Sub(missedAt) < missWindow {
 		k.mu.Unlock()
 		return nil, ErrUnauthenticated
 	}
-	k.missedAt = now
 	k.mu.Unlock()
 
 	key, err := k.fetch(ctx, kid)
 	if err != nil {
 		if errors.Is(err, errUnknownKey) {
+			k.mu.Lock()
+			k.missed[kid] = now
+			k.mu.Unlock()
 			return nil, ErrUnauthenticated
 		}
 		k.mu.Lock()
-		k.missedAt = time.Time{}
+		delete(k.missed, kid)
 		k.mu.Unlock()
 		return nil, err
 	}
 	k.mu.Lock()
+	delete(k.missed, kid)
 	k.positive[kid] = cachedKey{key: key, expires: now.Add(keyTTL)}
 	k.mu.Unlock()
 	return key, nil

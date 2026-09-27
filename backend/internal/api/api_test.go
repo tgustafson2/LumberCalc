@@ -62,7 +62,7 @@ func TestGetMeReturns500WhenSavingTheCallerFails(t *testing.T) {
 	if nameCalled {
 		t.Fatal("display name was called")
 	}
-	if !strings.Contains(log.String(), "ensure_user") {
+	if !strings.Contains(log.String(), "ensure_user") || !strings.Contains(log.String(), dbErr) {
 		t.Fatalf("log = %s", log.String())
 	}
 }
@@ -135,10 +135,12 @@ func TestGetMeActsOnTheSessionUserWhenTheRequestNamesSomeoneElse(t *testing.T) {
 }
 
 func TestGetMeFallsBackToTheClerkIDWhenTheNameLookupFails(t *testing.T) {
-	h := newHandler(t, func(*http.Request) (store.ClerkUserID, error) {
+	const lookupErr = "name lookup failed"
+	var log bytes.Buffer
+	h := newHandlerWithLog(t, &log, func(*http.Request) (store.ClerkUserID, error) {
 		return mustClerk(t, "user_123"), nil
 	}, okEnsure, func(context.Context, store.ClerkUserID) (string, error) {
-		return "", errors.New("name lookup failed")
+		return "", errors.New(lookupErr)
 	})
 	rr := call(h, http.MethodGet, "/v1/me", "Bearer token")
 	if rr.Code != http.StatusOK {
@@ -150,6 +152,12 @@ func TestGetMeFallsBackToTheClerkIDWhenTheNameLookupFails(t *testing.T) {
 	}
 	if body.DisplayName != "user_123" {
 		t.Fatalf("display_name = %s", body.DisplayName)
+	}
+	if strings.Contains(rr.Body.String(), lookupErr) {
+		t.Fatalf("body = %s", rr.Body.String())
+	}
+	if !strings.Contains(log.String(), "display_name") || !strings.Contains(log.String(), lookupErr) {
+		t.Fatalf("log = %s", log.String())
 	}
 }
 

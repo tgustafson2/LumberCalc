@@ -114,21 +114,95 @@ func TestJWKSOutageIsAServerErrorNotAnAuthFailure(t *testing.T) {
 	}
 }
 
-func TestUnknownKeyIDsFetchTheKeySetAtMostOnceAMinute(t *testing.T) {
-	fetches := 0
-	c, _ := newTestClerk(t, func(context.Context, string) (*clerk.JSONWebKey, error) {
-		fetches++
+func TestUnknownKeyIDFetchesAtMostOnceAMinute(t *testing.T) {
+	fetches := map[string]int{}
+	c, _ := newTestClerk(t, func(_ context.Context, kid string) (*clerk.JSONWebKey, error) {
+		fetches[kid]++
 		return nil, errUnknownKey
 	})
-	for _, kid := range []string{"kid-a", "kid-b"} {
-		token := sign(t, newKey(t), kid, baseClaims(testParty, testSub))
+	for range 2 {
+		token := sign(t, newKey(t), "kid-a", baseClaims(testParty, testSub))
 		_, err := c.Authenticate(reqWithBearer(token))
 		if !errors.Is(err, ErrUnauthenticated) {
-			t.Fatalf("kid %s err = %v", kid, err)
+			t.Fatal(err)
 		}
 	}
-	if fetches != 1 {
-		t.Fatalf("fetches = %d, want 1", fetches)
+	if fetches["kid-a"] != 1 {
+		t.Fatalf("kid-a fetches = %d, want 1", fetches["kid-a"])
+	}
+	token := sign(t, newKey(t), "kid-b", baseClaims(testParty, testSub))
+	_, err := c.Authenticate(reqWithBearer(token))
+	if !errors.Is(err, ErrUnauthenticated) {
+		t.Fatal(err)
+	}
+	if fetches["kid-b"] != 1 {
+		t.Fatalf("kid-b fetches = %d, want 1", fetches["kid-b"])
+	}
+}
+
+func TestTwoValidSigningKeysBothAuthenticate(t *testing.T) {
+	privA := newKey(t)
+	privB := newKey(t)
+	fetches := map[string]int{}
+	c, _ := newTestClerk(t, func(_ context.Context, kid string) (*clerk.JSONWebKey, error) {
+		fetches[kid]++
+		switch kid {
+		case "kid-a":
+			return publicJWK(privA, kid), nil
+		case "kid-b":
+			return publicJWK(privB, kid), nil
+		default:
+			return nil, errUnknownKey
+		}
+	})
+	tokenA := sign(t, privA, "kid-a", baseClaims(testParty, testSub))
+	tokenB := sign(t, privB, "kid-b", baseClaims(testParty, testSub))
+	idA, err := c.Authenticate(reqWithBearer(tokenA))
+	if err != nil {
+		t.Fatal(err)
+	}
+	idB, err := c.Authenticate(reqWithBearer(tokenB))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if idA.String() != testSub || idB.String() != testSub {
+		t.Fatalf("ids = %s %s", idA.String(), idB.String())
+	}
+	if fetches["kid-a"] != 1 || fetches["kid-b"] != 1 {
+		t.Fatalf("fetches = %v", fetches)
+	}
+}
+
+func TestExpiredTokenIsUnauthenticated(t *testing.T) {
+	priv := newKey(t)
+	c, _ := newTestClerk(t, func(_ context.Context, kid string) (*clerk.JSONWebKey, error) {
+		return publicJWK(priv, kid), nil
+	})
+	claims := baseClaims(testParty, testSub)
+	claims["exp"] = time.Now().Add(-2 * time.Minute).Unix()
+	token := sign(t, priv, "kid", claims)
+	_, err := c.Authenticate(reqWithBearer(token))
+	if !errors.Is(err, ErrUnauthenticated) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestJWKSOutageDoesNotBlockTheNextFetch(t *testing.T) {
+	fetches := 0
+	want := errors.New("jwks unavailable")
+	c, _ := newTestClerk(t, func(context.Context, string) (*clerk.JSONWebKey, error) {
+		fetches++
+		return nil, want
+	})
+	token := sign(t, newKey(t), "kid", baseClaims(testParty, testSub))
+	for range 2 {
+		_, err := c.Authenticate(reqWithBearer(token))
+		if !errors.Is(err, want) {
+			t.Fatalf("err = %v", err)
+		}
+	}
+	if fetches != 2 {
+		t.Fatalf("fetches = %d, want 2", fetches)
 	}
 }
 

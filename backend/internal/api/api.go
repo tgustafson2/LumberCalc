@@ -79,7 +79,7 @@ func (a *API) handle(pattern string, h authedHandler) {
 		}
 		userID, err := a.d.EnsureUser(r.Context(), clerkID)
 		if err != nil {
-			a.d.Log.ErrorContext(r.Context(), "ensure_user")
+			a.d.Log.ErrorContext(r.Context(), "ensure_user", "err", err)
 			server.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
 			return
 		}
@@ -96,7 +96,11 @@ type meBody struct {
 // me reports the session user. It ignores any other identity in the request.
 func (a *API) me(w http.ResponseWriter, r *http.Request, c Caller) {
 	name, err := a.d.DisplayName(r.Context(), c.ClerkID())
-	if err != nil || name == "" {
+	if err != nil {
+		a.d.Log.ErrorContext(r.Context(), "display_name", "err", err)
+		name = ""
+	}
+	if name == "" {
 		name = c.ClerkID().String()
 	}
 	server.WriteJSON(w, http.StatusOK, meBody{

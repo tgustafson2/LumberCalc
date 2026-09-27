@@ -31,7 +31,7 @@ gofmt -w .
 
 `go test ./...` skips Postgres integration tests when `TEST_DATABASE_URL` is unset. A package that finishes in a few milliseconds did not hit the database. Set `TEST_DATABASE_URL` to a disposable local database before treating a store or migration change as verified.
 
-Copy `backend/.env.example` to `backend/.env` for a local API. Required values are `DATABASE_URL` and `CLERK_SECRET_KEY`. `HTTP_ADDR` defaults to `:8080`. `LOG_LEVEL` defaults to `info`. `CLERK_AUTHORIZED_PARTIES` defaults to `http://localhost:5173`.
+Copy `backend/.env.example` to `backend/.env` for a local API. Required values are `DATABASE_URL`, `CLERK_SECRET_KEY`, and `CLERK_AUTHORIZED_PARTIES`. `HTTP_ADDR` defaults to `:8080`. `LOG_LEVEL` defaults to `info`.
 
 ## Conventions
 

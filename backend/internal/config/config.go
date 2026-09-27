@@ -15,8 +15,7 @@ import (
 
 // Config is validated process configuration.
 // HTTP_ADDR defaults to :8080 and LOG_LEVEL defaults to info.
-// ClerkAuthorizedParties defaults to http://localhost:5173 when the variable
-// is unset, blank, or only commas.
+// CLERK_AUTHORIZED_PARTIES is required. A blank or comma-only value is rejected.
 type Config struct {
 	HTTPAddr               string
 	LogLevel               slog.Level
@@ -42,14 +41,36 @@ type lookup func(key string) (value string, ok bool)
 // Load reads dotenvPath, then lets the process environment override it.
 // A missing file is not an error. Invalid or missing required values come back as one joined error.
 func Load(dotenvPath string) (Config, error) {
+	env, err := readEnv(dotenvPath)
+	if err != nil {
+		return Config{}, err
+	}
+	return parse(env)
+}
+
+// LoadDatabaseURL reads DATABASE_URL with the same file and process rules as Load.
+// Clerk settings are not read. Migrate uses this so a database-only environment can migrate.
+func LoadDatabaseURL(dotenvPath string) (Secret, error) {
+	env, err := readEnv(dotenvPath)
+	if err != nil {
+		return Secret{}, err
+	}
+	dsn, _ := env("DATABASE_URL")
+	if dsn == "" {
+		return Secret{}, errors.New("DATABASE_URL is required")
+	}
+	return Secret{value: dsn}, nil
+}
+
+func readEnv(dotenvPath string) (lookup, error) {
 	fileVars, err := godotenv.Read(dotenvPath)
 	if err != nil {
 		if !errors.Is(err, fs.ErrNotExist) && !errors.Is(err, os.ErrNotExist) {
-			return Config{}, err
+			return nil, err
 		}
 		fileVars = nil
 	}
-	return parse(layered(os.LookupEnv, fileVars))
+	return layered(os.LookupEnv, fileVars), nil
 }
 
 func parse(env lookup) (Config, error) {
@@ -80,6 +101,10 @@ func parse(env lookup) (Config, error) {
 	}
 
 	partiesRaw, partiesOK := env("CLERK_AUTHORIZED_PARTIES")
+	parties, partiesErr := clerkParties(partiesRaw, partiesOK)
+	if partiesErr != nil {
+		problems = append(problems, partiesErr)
+	}
 
 	if len(problems) > 0 {
 		return Config{}, errors.Join(problems...)
@@ -90,15 +115,13 @@ func parse(env lookup) (Config, error) {
 		LogLevel:               level,
 		DatabaseURL:            Secret{value: dsn},
 		ClerkSecretKey:         Secret{value: clerk},
-		ClerkAuthorizedParties: clerkParties(partiesRaw, partiesOK),
+		ClerkAuthorizedParties: parties,
 	}, nil
 }
 
-const defaultClerkParty = "http://localhost:5173"
-
-func clerkParties(raw string, ok bool) []string {
+func clerkParties(raw string, ok bool) ([]string, error) {
 	if !ok || strings.TrimSpace(raw) == "" {
-		return []string{defaultClerkParty}
+		return nil, errors.New("CLERK_AUTHORIZED_PARTIES is required")
 	}
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
@@ -109,9 +132,9 @@ func clerkParties(raw string, ok bool) []string {
 		}
 	}
 	if len(out) == 0 {
-		return []string{defaultClerkParty}
+		return nil, errors.New("CLERK_AUTHORIZED_PARTIES is required")
 	}
-	return out
+	return out, nil
 }
 
 func parseLevel(raw string) (slog.Level, error) {
