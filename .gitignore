@@ -3,4 +3,5 @@ frontend/.env
 
 .arena/*
 .cursor/*
+.pnpm-store/*
 sprints/*
