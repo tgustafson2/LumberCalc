@@ -1,0 +1,168 @@
+openapi: 3.0.3
+info:
+  title: LumberCalc API
+  version: 0.0.0
+  description: >
+    Paths under /v1 require a bearer session.
+    This includes a path that has no operation.
+    A request under /v1 with no session returns 401.
+    A request under /v1 with a session and no operation returns 404.
+    /healthz and /readyz do not require a session.
+servers:
+  - url: /
+tags:
+  - name: probes
+  - name: v1
+security:
+  - bearer: []
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      tags: [probes]
+      security: []
+      responses:
+        "200":
+          description: The process is up.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "500":
+          description: The process panicked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /readyz:
+    get:
+      operationId: getReadiness
+      tags: [probes]
+      security: []
+      responses:
+        "200":
+          description: Every probe succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyOk"
+        "503":
+          description: A probe failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadyFailed"
+        "500":
+          description: The process panicked.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/me:
+    get:
+      operationId: getMe
+      tags: [v1]
+      responses:
+        "200":
+          description: The signed-in user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Me"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The session check or the user row failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+    ReadyOk:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready]
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReadinessCheck"
+    ReadyFailed:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [not_ready]
+        checks:
+          type: array
+          items:
+            $ref: "#/components/schemas/ReadinessCheck"
+    ReadinessCheck:
+      type: object
+      additionalProperties: false
+      required: [name, ok]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        ok:
+          type: boolean
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: string
+          minLength: 1
+    Me:
+      type: object
+      additionalProperties: false
+      required: [user_id, clerk_user_id, display_name]
+      properties:
+        user_id:
+          type: string
+          minLength: 1
+        clerk_user_id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        display_name:
+          type: string
+          minLength: 1
+    DesignDocument:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]

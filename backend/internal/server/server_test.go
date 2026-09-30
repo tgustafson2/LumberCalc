@@ -56,7 +56,7 @@ func TestReadyzOK(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	want := `{"status":"ready","checks":[{"name":"postgres","ok":true}]}`
+	want := `{"checks":[{"name":"postgres","ok":true}],"status":"ready"}`
 	got := strings.TrimSpace(rr.Body.String())
 	if got != want {
 		t.Fatalf("body = %s, want %s", got, want)
@@ -82,7 +82,7 @@ func TestReadyzNotReadyOmitsError(t *testing.T) {
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	want := `{"status":"not_ready","checks":[{"name":"postgres","ok":false}]}`
+	want := `{"checks":[{"name":"postgres","ok":false}],"status":"not_ready"}`
 	got := strings.TrimSpace(rr.Body.String())
 	if got != want {
 		t.Fatalf("body = %s, want %s", got, want)
@@ -111,7 +111,7 @@ func TestReadyzMigrationsFailing(t *testing.T) {
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	want := `{"status":"not_ready","checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":false}]}`
+	want := `{"checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":false}],"status":"not_ready"}`
 	got := strings.TrimSpace(rr.Body.String())
 	if got != want {
 		t.Fatalf("body = %s, want %s", got, want)
@@ -138,7 +138,7 @@ func TestReadyzChecksRenderInOrder(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d", rr.Code)
 	}
-	want := `{"status":"ready","checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":true}]}`
+	want := `{"checks":[{"name":"postgres","ok":true},{"name":"migrations","ok":true}],"status":"ready"}`
 	got := strings.TrimSpace(rr.Body.String())
 	if got != want {
 		t.Fatalf("body = %s, want %s", got, want)

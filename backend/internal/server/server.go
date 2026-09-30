@@ -2,6 +2,8 @@
 // /healthz and /readyz are public. /v1/ is mounted only when Deps.V1 is set.
 package server
 
+//go:generate go tool oapi-codegen -config oapi-codegen.yaml ../../openapi.yaml
+
 import (
 	"context"
 	"crypto/rand"
@@ -13,6 +15,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -115,18 +118,8 @@ func NewLogger(w io.Writer, level slog.Level) *slog.Logger {
 	return slog.New(ctxHandler{slog.NewJSONHandler(w, &slog.HandlerOptions{Level: level})})
 }
 
-type checkResult struct {
-	Name string `json:"name"`
-	OK   bool   `json:"ok"`
-}
-
-type readyBody struct {
-	Status string        `json:"status"`
-	Checks []checkResult `json:"checks"`
-}
-
-func healthz(w http.ResponseWriter, r *http.Request) {
-	WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+func healthz(w http.ResponseWriter, _ *http.Request) {
+	WriteJSON(w, http.StatusOK, Health{Status: HealthStatusOk})
 }
 
 func readyz(checks []Check, log *slog.Logger) http.Handler {
@@ -134,30 +127,31 @@ func readyz(checks []Check, log *slog.Logger) http.Handler {
 		ctx, cancel := context.WithTimeout(r.Context(), readyTimeout)
 		defer cancel()
 
-		results := make([]checkResult, len(checks))
+		results := make([]ReadinessCheck, len(checks))
 		ready := true
 		for i, c := range checks {
 			err := c.Probe(ctx)
 			ok := err == nil
-			results[i] = checkResult{Name: c.Name, OK: ok}
+			results[i] = ReadinessCheck{Name: c.Name, Ok: ok}
 			if !ok {
 				ready = false
 				log.WarnContext(r.Context(), "readiness check failed", "check", c.Name)
 			}
 		}
-
-		status := http.StatusOK
-		bodyStatus := "ready"
-		if !ready {
-			status = http.StatusServiceUnavailable
-			bodyStatus = "not_ready"
+		if ready {
+			WriteJSON(w, http.StatusOK, ReadyOk{Status: ReadyOkStatusReady, Checks: results})
+			return
 		}
-		WriteJSON(w, status, readyBody{Status: bodyStatus, Checks: results})
+		WriteJSON(w, http.StatusServiceUnavailable, ReadyFailed{Status: ReadyFailedStatusNotReady, Checks: results})
 	})
 }
 
-func notFound(w http.ResponseWriter, r *http.Request) {
-	WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+func notFound(w http.ResponseWriter, _ *http.Request) {
+	WriteError(w, http.StatusNotFound)
+}
+
+func WriteError(w http.ResponseWriter, status int) {
+	WriteJSON(w, status, Error{Error: strings.ToLower(http.StatusText(status))})
 }
 
 // WriteJSON sets Content-Type to application/json, writes status, then encodes body.
@@ -225,7 +219,7 @@ func recoverPanic(log *slog.Logger, next http.Handler) http.Handler {
 		defer func() {
 			if rec := recover(); rec != nil {
 				log.ErrorContext(r.Context(), "handler panic")
-				WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+				WriteError(w, http.StatusInternalServerError)
 			}
 		}()
 		next.ServeHTTP(w, r)

@@ -79,15 +79,15 @@ func TestGetMeReturnsTheCallerFromTheSession(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
-	var body meBody
+	var body Me
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.UserID != "00000000-0000-0000-0000-000000000000" {
-		t.Fatalf("user_id = %s", body.UserID)
+	if body.UserId != "00000000-0000-0000-0000-000000000000" {
+		t.Fatalf("user_id = %s", body.UserId)
 	}
-	if body.ClerkUserID != "user_123" {
-		t.Fatalf("clerk_user_id = %s", body.ClerkUserID)
+	if body.ClerkUserId != "user_123" {
+		t.Fatalf("clerk_user_id = %s", body.ClerkUserId)
 	}
 	if body.DisplayName != "Ada Lovelace" {
 		t.Fatalf("display_name = %s", body.DisplayName)
@@ -122,12 +122,12 @@ func TestGetMeActsOnTheSessionUserWhenTheRequestNamesSomeoneElse(t *testing.T) {
 	if named.String() != sessionUser {
 		t.Fatalf("name lookup clerk id = %s, want %s", named.String(), sessionUser)
 	}
-	var body meBody
+	var body Me
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if body.ClerkUserID != sessionUser || strings.Contains(body.ClerkUserID, otherUser) {
-		t.Fatalf("body clerk_user_id = %s", body.ClerkUserID)
+	if body.ClerkUserId != sessionUser || strings.Contains(body.ClerkUserId, otherUser) {
+		t.Fatalf("body clerk_user_id = %s", body.ClerkUserId)
 	}
 	if strings.Contains(rr.Body.String(), otherUser) {
 		t.Fatalf("body included %s: %s", otherUser, rr.Body.String())
@@ -146,7 +146,7 @@ func TestGetMeFallsBackToTheClerkIDWhenTheNameLookupFails(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
-	var body meBody
+	var body Me
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -171,7 +171,7 @@ func TestGetMeFallsBackToTheClerkIDWhenTheNameIsBlank(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
-	var body meBody
+	var body Me
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}

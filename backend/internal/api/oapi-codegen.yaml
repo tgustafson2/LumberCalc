@@ -1,0 +1,9 @@
+package: api
+output: openapi.gen.go
+generate:
+  models: true
+output-options:
+  include-tags: [v1]
+  exclude-schemas: [Error]
+compatibility:
+  always-prefix-enum-values: true

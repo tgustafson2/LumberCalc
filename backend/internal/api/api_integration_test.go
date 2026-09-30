@@ -33,7 +33,7 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
-	var body meBody
+	var body Me
 	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +42,8 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if body.UserID != rowID {
-		t.Fatalf("user_id = %s, row = %s", body.UserID, rowID)
+	if body.UserId != rowID {
+		t.Fatalf("user_id = %s, row = %s", body.UserId, rowID)
 	}
 	if rowID == "00000000-0000-0000-0000-000000000000" {
 		t.Fatal("row id is the zero uuid")

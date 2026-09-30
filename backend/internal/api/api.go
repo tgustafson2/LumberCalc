@@ -2,6 +2,8 @@
 // A path under /v1 checks the session before the handler runs, including paths with no route.
 package api
 
+//go:generate go tool oapi-codegen -config oapi-codegen.yaml ../../openapi.yaml
+
 import (
 	"context"
 	"errors"
@@ -70,27 +72,21 @@ func (a *API) handle(pattern string, h authedHandler) {
 		if err != nil {
 			if errors.Is(err, clerkauth.ErrUnauthenticated) {
 				w.Header().Set("WWW-Authenticate", "Bearer")
-				server.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				server.WriteError(w, http.StatusUnauthorized)
 				return
 			}
 			a.d.Log.ErrorContext(r.Context(), "authenticate")
-			server.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			server.WriteError(w, http.StatusInternalServerError)
 			return
 		}
 		userID, err := a.d.EnsureUser(r.Context(), clerkID)
 		if err != nil {
 			a.d.Log.ErrorContext(r.Context(), "ensure_user", "err", err)
-			server.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal server error"})
+			server.WriteError(w, http.StatusInternalServerError)
 			return
 		}
 		h(w, r, Caller{clerk: clerkID, user: userID})
 	})
-}
-
-type meBody struct {
-	UserID      string `json:"user_id"`
-	ClerkUserID string `json:"clerk_user_id"`
-	DisplayName string `json:"display_name"`
 }
 
 // me reports the session user. It ignores any other identity in the request.
@@ -103,13 +99,13 @@ func (a *API) me(w http.ResponseWriter, r *http.Request, c Caller) {
 	if name == "" {
 		name = c.ClerkID().String()
 	}
-	server.WriteJSON(w, http.StatusOK, meBody{
-		UserID:      c.UserID().String(),
-		ClerkUserID: c.ClerkID().String(),
+	server.WriteJSON(w, http.StatusOK, Me{
+		UserId:      c.UserID().String(),
+		ClerkUserId: c.ClerkID().String(),
 		DisplayName: name,
 	})
 }
 
-func (a *API) notFound(w http.ResponseWriter, r *http.Request, _ Caller) {
-	server.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "not found"})
+func (a *API) notFound(w http.ResponseWriter, _ *http.Request, _ Caller) {
+	server.WriteError(w, http.StatusNotFound)
 }

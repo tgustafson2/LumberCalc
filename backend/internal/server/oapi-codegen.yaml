@@ -1,0 +1,8 @@
+package: server
+output: openapi.gen.go
+generate:
+  models: true
+output-options:
+  include-tags: [probes]
+compatibility:
+  always-prefix-enum-values: true
