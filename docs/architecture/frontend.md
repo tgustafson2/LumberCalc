@@ -9,7 +9,10 @@
 - `frontend/src/gate.ts` maps a known session kind to `/` or `/designs`.
 - `frontend/src/app.tsx` classifies the Clerk session and owns the routes.
 - `frontend/src/api.ts` is the `/v1` client. It parses JSON at the network boundary.
+- `frontend/src/api.gen.ts` is generated from `backend/openapi.yaml`. Do not edit it.
 - `frontend/vite.config.ts` serves `http://localhost:5173` and proxies `/v1` to the API on `:8080`.
+
+`openapi-typescript` writes `frontend/src/api.gen.ts` from `backend/openapi.yaml`. `frontend/src/api.ts` maps the snake_case response to the camelCase `Me` type. `toMe` is the only mapper.
 
 ## Rules for new code
 

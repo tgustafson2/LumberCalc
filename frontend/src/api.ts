@@ -1,3 +1,6 @@
+import createClient from "openapi-fetch";
+import type { components, paths } from "./api.gen";
+
 declare const brand: unique symbol;
 type Brand<T, B extends string> = T & { readonly [brand]: B };
 
@@ -21,10 +24,6 @@ export type V1Result<T> =
 
 export type MeResult = V1Result<Me>;
 
-type ParseResult<T> =
-  | { readonly kind: "parsed"; readonly value: T }
-  | { readonly kind: "invalid" };
-
 type RequestOptions = { readonly signal?: AbortSignal };
 
 export type V1Client = {
@@ -33,98 +32,72 @@ export type V1Client = {
 
 type TokenSource = () => Promise<string | null>;
 
+type Wire = components["schemas"];
+
+type Parsed<T> = { readonly kind: "ok"; readonly value: T } | { readonly kind: "invalid" };
+
+type ClientResult<W> = {
+  readonly data?: W;
+  readonly error?: Wire["Error"];
+  readonly response: Response;
+};
+
 export function createV1Client(options: {
   readonly getToken: TokenSource;
+  readonly baseUrl?: string;
 }): V1Client {
+  const http = createClient<paths>({ baseUrl: options.baseUrl });
   return {
     me: ({ signal } = {}) =>
-      getV1({
-        path: "/v1/me",
-        signal,
-        getToken: options.getToken,
-        parse: parseMe,
-      }),
+      send(options.getToken, (headers) => http.GET("/v1/me", { signal, headers }), toMe),
   };
 }
 
-async function getV1<T>(request: {
-  readonly path: `/v1/${string}`;
-  readonly signal: AbortSignal | undefined;
-  readonly getToken: TokenSource;
-  readonly parse: (body: unknown) => ParseResult<T>;
-}): Promise<V1Result<T>> {
-  const token = await request.getToken();
+async function send<W, T>(
+  getToken: TokenSource,
+  request: (headers: { Authorization: string }) => Promise<ClientResult<W>>,
+  toValue: (wire: W) => Parsed<T>,
+): Promise<V1Result<T>> {
+  const token = await getToken();
   if (token === null) {
     return { kind: "no-token" };
   }
 
-  let response: Response;
+  let result: ClientResult<W>;
   try {
-    response = await fetch(request.path, {
-      signal: request.signal,
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    result = await request({ Authorization: `Bearer ${token}` });
   } catch (error: unknown) {
     if (isAbortError(error)) {
       throw error;
     }
+    if (error instanceof SyntaxError) {
+      return { kind: "invalid" };
+    }
     return { kind: "unreachable" };
   }
 
-  if (response.status === 401) {
+  if (result.response.status === 401) {
     return { kind: "unauthorized" };
   }
-
-  const body = await readBody(response);
-  if (response.status !== 200) {
-    return {
-      kind: "failed",
-      status: response.status,
-      message: errorMessage(body),
-    };
+  if (result.data !== undefined) {
+    return toValue(result.data);
   }
-
-  const parsed = request.parse(body);
-  if (parsed.kind === "invalid") {
-    return { kind: "invalid" };
-  }
-  return { kind: "ok", value: parsed.value };
+  return {
+    kind: "failed",
+    status: result.response.status,
+    message: errorMessage(result.error),
+  };
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof Error && error.name === "AbortError";
-}
-
-async function readBody(response: Response): Promise<unknown> {
-  const text = await response.text();
-  try {
-    const parsed: unknown = JSON.parse(text);
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-// A Clerk subject in this app starts with "user_".
-// store.ParseClerkUserID also accepts any other non-empty subject up to 64 bytes.
-function parseMe(body: unknown): ParseResult<Me> {
-  if (!isRecord(body)) {
-    return { kind: "invalid" };
-  }
-  const userId = body.user_id;
-  const clerkUserId = body.clerk_user_id;
-  const displayName = body.display_name;
-  if (typeof userId !== "string" || userId.length === 0) {
-    return { kind: "invalid" };
-  }
-  if (typeof clerkUserId !== "string" || !clerkUserId.startsWith("user_")) {
-    return { kind: "invalid" };
-  }
-  if (typeof displayName !== "string") {
+function toMe(wire: Wire["Me"]): Parsed<Me> {
+  const userId = text(wire.user_id);
+  const clerkUserId = text(wire.clerk_user_id);
+  const displayName = text(wire.display_name);
+  if (userId === null || clerkUserId === null || displayName === null) {
     return { kind: "invalid" };
   }
   return {
-    kind: "parsed",
+    kind: "ok",
     value: {
       userId: userId as UserId,
       clerkUserId: clerkUserId as ClerkUserId,
@@ -133,17 +106,20 @@ function parseMe(body: unknown): ParseResult<Me> {
   };
 }
 
-function errorMessage(body: unknown): string {
-  if (!isRecord(body)) {
-    return "The API request failed.";
+function text(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
   }
-  const message = body.error;
-  if (typeof message !== "string") {
-    return "The API request failed.";
-  }
-  return message;
+  return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function errorMessage(error: Wire["Error"] | undefined): string {
+  if (error === undefined || typeof error.error !== "string" || error.error.trim().length === 0) {
+    return "The API request failed.";
+  }
+  return error.error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }

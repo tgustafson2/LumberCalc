@@ -9,7 +9,7 @@ describe("createV1Client me", () => {
   it("returns no-token and does not call fetch when Clerk has no token", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
-    const client = createV1Client({ getToken: async () => null });
+    const client = createV1Client({ getToken: async () => null, baseUrl: "http://localhost" });
 
     await expect(client.me()).resolves.toEqual({ kind: "no-token" });
     expect(fetchMock.mock.calls).toEqual([]);
@@ -20,7 +20,10 @@ describe("createV1Client me", () => {
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })),
     );
-    const client = createV1Client({ getToken: async () => "session-token" });
+    const client = createV1Client({
+      getToken: async () => "session-token",
+      baseUrl: "http://localhost",
+    });
 
     await expect(client.me()).resolves.toEqual({ kind: "unauthorized" });
   });

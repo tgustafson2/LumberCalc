@@ -14,6 +14,8 @@ The packages in `AGENTS.md` are the backend layers. Put new code in one of those
 - `backend/db/migrations` and `backend/db/queries` are the schema and the sqlc inputs.
 - `backend/internal/store/internal/q` is generated. Do not edit it.
 
+`backend/openapi.yaml` is the HTTP contract. Tag `probes` selects the models in `backend/internal/server/openapi.gen.go`. Tag `v1` selects the models in `backend/internal/api/openapi.gen.go`. `make generate` writes those files and `frontend/src/api.gen.ts`.
+
 ## Dependency direction
 
 `cmd/api` depends on `config`, `clerkauth`, `store`, `api`, `server`, and `db`.
