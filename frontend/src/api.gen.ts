@@ -82,10 +82,54 @@ export interface components {
             clerk_user_id: string;
             display_name: string;
         };
+        /** @description A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees. */
         DesignDocument: {
             /** @enum {integer} */
             schemaVersion: 1;
+            /** @enum {string} */
+            units: "in";
+            pieces: components["schemas"]["DesignPiece"][];
+            connections: components["schemas"]["DesignConnection"][];
         };
+        DesignPiece: {
+            id: components["schemas"]["DocumentUuid"];
+            name: string;
+            materialId: components["schemas"]["DocumentUuid"];
+            /** @default false */
+            roughCut: boolean;
+            /** @description Exact inch length. The server stores the JSON number text as sent. */
+            lengthIn: number;
+            continuity: components["schemas"]["DesignContinuity"];
+            transform: components["schemas"]["DesignTransform"];
+        };
+        /** @description One flag per local axis. True means that axis stays one board. False means the solver may splice. */
+        DesignContinuity: {
+            x: boolean;
+            y: boolean;
+            z: boolean;
+        };
+        DesignTransform: {
+            /** @description Inches, in axis order x, y, z. */
+            positionIn: number[];
+            /** @description Euler angles in degrees, applied in X, then Y, then Z order. */
+            rotationDeg: number[];
+        };
+        DesignConnection: {
+            id: string;
+            pieceAId: components["schemas"]["DocumentUuid"];
+            pieceBId: components["schemas"]["DocumentUuid"];
+            /** @enum {string} */
+            joinType: "butt" | "lap" | "fastener";
+            faceA: string;
+            faceB: string;
+            /** @description Exact inches. The server stores the JSON number text as sent. */
+            wasteIn: number;
+        };
+        /**
+         * Format: uuid
+         * @description A client-generated UUID. Unique among piece ids in one document. It is not a database key.
+         */
+        DocumentUuid: string;
     };
     responses: never;
     parameters: never;

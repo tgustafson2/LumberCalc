@@ -14,6 +14,8 @@ export type Me = {
   readonly displayName: string;
 };
 
+export type DesignDocument = components["schemas"]["DesignDocument"];
+
 export type V1Result<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "no-token" }

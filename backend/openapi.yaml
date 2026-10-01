@@ -159,10 +159,105 @@ components:
           type: string
           minLength: 1
     DesignDocument:
+      x-go-type: store.Document
+      x-go-type-import:
+        path: lumbercalc/backend/internal/store
+      description: A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees.
       type: object
       additionalProperties: false
-      required: [schemaVersion]
+      required: [schemaVersion, units, pieces, connections]
       properties:
         schemaVersion:
           type: integer
           enum: [1]
+        units:
+          type: string
+          enum: [in]
+        pieces:
+          type: array
+          items:
+            $ref: "#/components/schemas/DesignPiece"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DesignConnection"
+    DesignPiece:
+      type: object
+      additionalProperties: false
+      required: [id, name, materialId, lengthIn, continuity, transform]
+      properties:
+        id:
+          $ref: "#/components/schemas/DocumentUuid"
+        name:
+          type: string
+        materialId:
+          $ref: "#/components/schemas/DocumentUuid"
+        roughCut:
+          type: boolean
+          default: false
+        lengthIn:
+          type: number
+          description: Exact inch length. The server stores the JSON number text as sent.
+        continuity:
+          $ref: "#/components/schemas/DesignContinuity"
+        transform:
+          $ref: "#/components/schemas/DesignTransform"
+    DesignContinuity:
+      type: object
+      additionalProperties: false
+      required: [x, y, z]
+      description: One flag per local axis. True means that axis stays one board. False means the solver may splice.
+      properties:
+        x:
+          type: boolean
+        y:
+          type: boolean
+        z:
+          type: boolean
+    DesignTransform:
+      type: object
+      additionalProperties: false
+      required: [positionIn, rotationDeg]
+      properties:
+        positionIn:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: number
+          description: Inches, in axis order x, y, z.
+        rotationDeg:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            type: number
+          description: Euler angles in degrees, applied in X, then Y, then Z order.
+    DesignConnection:
+      type: object
+      additionalProperties: false
+      required: [id, pieceAId, pieceBId, joinType, faceA, faceB, wasteIn]
+      properties:
+        id:
+          type: string
+          minLength: 1
+        pieceAId:
+          $ref: "#/components/schemas/DocumentUuid"
+        pieceBId:
+          $ref: "#/components/schemas/DocumentUuid"
+        joinType:
+          type: string
+          enum: [butt, lap, fastener]
+        faceA:
+          type: string
+          minLength: 1
+        faceB:
+          type: string
+          minLength: 1
+        wasteIn:
+          type: number
+          description: Exact inches. The server stores the JSON number text as sent.
+    DocumentUuid:
+      description: A client-generated UUID. Unique among piece ids in one document. It is not a database key.
+      type: string
+      format: uuid
