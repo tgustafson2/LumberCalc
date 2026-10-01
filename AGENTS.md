@@ -32,30 +32,19 @@ Reference `docs/architecture/backend.md` for detailed conventions.
 
 ## Commands
 
+`README.md` has the steps to run LumberCalc on a local computer. Read it for Postgres, `.env` files, migrations, the API, and the web app.
+
 Run these from `backend/`.
 
 ```bash
 go test ./...
-go run ./cmd/api
-go run ./cmd/migrate
 sqlc generate
 gofmt -w .
 ```
 
 `go test ./...` skips Postgres integration tests when `TEST_DATABASE_URL` is unset. A package that finishes in a few milliseconds did not hit the database. Set `TEST_DATABASE_URL` to a disposable local database before treating a store or migration change as verified.
 
-Copy `backend/.env.example` to `backend/.env` for a local API. Required values are `DATABASE_URL`, `CLERK_SECRET_KEY`, and `CLERK_AUTHORIZED_PARTIES`. `HTTP_ADDR` defaults to `:8080`. `LOG_LEVEL` defaults to `info`.
-
-From the repo root:
-
-```bash
-cd frontend
-pnpm install
-pnpm test
-pnpm dev
-```
-
-`frontend/.env.example` holds `VITE_CLERK_PUBLISHABLE_KEY`. Replace the placeholder with a Clerk publishable key (`pk_test_` or `pk_live_`) from the same Clerk instance as `CLERK_SECRET_KEY`. The placeholder is not a key Clerk accepts.
+From `frontend/`, run `pnpm test`.
 
 ## Conventions
 
