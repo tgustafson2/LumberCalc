@@ -25,13 +25,17 @@ type Caller struct {
 func (c Caller) ClerkID() store.ClerkUserID { return c.clerk }
 func (c Caller) UserID() store.UserID       { return c.user }
 
-// Deps supplies logging, the session check, the user row, and the display name.
+// Deps supplies logging, the session check, the user row, the display name, and design writes.
 // New rejects a nil logger or a nil callback.
 type Deps struct {
 	Log          *slog.Logger
 	Authenticate func(*http.Request) (store.ClerkUserID, error)
 	EnsureUser   func(context.Context, store.ClerkUserID) (store.UserID, error)
 	DisplayName  func(context.Context, store.ClerkUserID) (string, error)
+	Save         func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	Get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	List         func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	Delete       func(context.Context, store.UserID, store.DesignID) error
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -60,8 +64,25 @@ func New(d Deps) (http.Handler, error) {
 	if d.DisplayName == nil {
 		return nil, errors.New("display name is required")
 	}
+	if d.Save == nil {
+		return nil, errors.New("save is required")
+	}
+	if d.Get == nil {
+		return nil, errors.New("get is required")
+	}
+	if d.List == nil {
+		return nil, errors.New("list is required")
+	}
+	if d.Delete == nil {
+		return nil, errors.New("delete is required")
+	}
 	a := &API{d: d, mux: http.NewServeMux()}
 	a.handle("GET /v1/me", a.me)
+	a.handle("POST /v1/designs", a.createDesign)
+	a.handle("GET /v1/designs", a.listDesigns)
+	a.handle("GET /v1/designs/{id}", a.getDesign)
+	a.handle("PUT /v1/designs/{id}", a.replaceDesign)
+	a.handle("DELETE /v1/designs/{id}", a.deleteDesign)
 	a.handle("/v1/", a.notFound)
 	return a.mux, nil
 }

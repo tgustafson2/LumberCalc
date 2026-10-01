@@ -231,6 +231,22 @@ func newHandlerWithLog(
 		Authenticate: auth,
 		EnsureUser:   ensure,
 		DisplayName:  name,
+		Save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			t.Fatal("save was called")
+			return store.Design{}, nil
+		},
+		Get: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			t.Fatal("get was called")
+			return store.Design{}, nil
+		},
+		List: func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			t.Fatal("list was called")
+			return nil, nil
+		},
+		Delete: func(context.Context, store.UserID, store.DesignID) error {
+			t.Fatal("delete was called")
+			return nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -15,18 +15,31 @@ import (
 // UserID is the internal users.id. Only the store can build one, from a row it read.
 type UserID struct{ v [16]byte }
 
-func (id UserID) String() string {
+func (id UserID) String() string { return formatUUID(id.v) }
+
+func formatUUID(v [16]byte) string {
 	var b [36]byte
-	hex.Encode(b[0:8], id.v[0:4])
+	hex.Encode(b[0:8], v[0:4])
 	b[8] = '-'
-	hex.Encode(b[9:13], id.v[4:6])
+	hex.Encode(b[9:13], v[4:6])
 	b[13] = '-'
-	hex.Encode(b[14:18], id.v[6:8])
+	hex.Encode(b[14:18], v[6:8])
 	b[18] = '-'
-	hex.Encode(b[19:23], id.v[8:10])
+	hex.Encode(b[19:23], v[8:10])
 	b[23] = '-'
-	hex.Encode(b[24:36], id.v[10:16])
+	hex.Encode(b[24:36], v[10:16])
 	return string(b[:])
+}
+
+func decodeUUID(raw string, dst *[16]byte) error {
+	compact := make([]byte, 0, 32)
+	compact = append(compact, raw[0:8]...)
+	compact = append(compact, raw[9:13]...)
+	compact = append(compact, raw[14:18]...)
+	compact = append(compact, raw[19:23]...)
+	compact = append(compact, raw[24:36]...)
+	_, err := hex.Decode(dst[:], compact)
+	return err
 }
 
 // ClerkUserID is a verified Clerk subject. The only way to get one is ParseClerkUserID.
@@ -52,9 +65,26 @@ func ParseClerkUserID(raw string) (ClerkUserID, error) {
 	return ClerkUserID{s: raw}, nil
 }
 
-type Store struct{ q *q.Queries }
+type Store struct {
+	pool *pgxpool.Pool
+	q    *q.Queries
+}
 
-func New(pool *pgxpool.Pool) *Store { return &Store{q: q.New(pool)} }
+func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool, q: q.New(pool)} }
+
+// withTx runs fn in one transaction.
+// Save uses it so the design row and its usage rows commit together.
+func (s *Store) withTx(ctx context.Context, fn func(*q.Queries) error) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	if err := fn(s.q.WithTx(tx)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
 
 // EnsureUser returns the internal id for a Clerk user and guarantees exactly one
 // user_settings row with schema defaults. Safe under concurrent first requests

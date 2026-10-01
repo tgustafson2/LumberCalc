@@ -25,6 +25,10 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
 			return "Ada", nil
 		},
+		Save:   st.Save,
+		Get:    st.Get,
+		List:   st.List,
+		Delete: st.Delete,
 	})
 	if err != nil {
 		t.Fatal(err)

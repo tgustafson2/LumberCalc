@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -24,11 +25,19 @@ import (
 )
 
 type exchange struct {
-	name    string
-	checks  []server.Check
-	auth    func(*http.Request) (store.ClerkUserID, error)
-	ensure  func(context.Context, store.ClerkUserID) (store.UserID, error)
-	display func(context.Context, store.ClerkUserID) (string, error)
+	name         string
+	checks       []server.Check
+	auth         func(*http.Request) (store.ClerkUserID, error)
+	ensure       func(context.Context, store.ClerkUserID) (store.UserID, error)
+	display      func(context.Context, store.ClerkUserID) (string, error)
+	path         string
+	body         string
+	validRequest bool
+	status       int
+	save         func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	list         func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	delete       func(context.Context, store.UserID, store.DesignID) error
 }
 
 var exchanges = map[string][]exchange{
@@ -74,6 +83,98 @@ var exchanges = map[string][]exchange{
 			},
 		},
 	},
+	"createDesign": {
+		{
+			name:         "created",
+			path:         "/v1/designs",
+			body:         `{"name":"Bench"}`,
+			validRequest: true,
+			status:       http.StatusCreated,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+				return sampleDesign(1), nil
+			},
+		},
+		{
+			name:   "blank name",
+			path:   "/v1/designs",
+			body:   `{"name":""}`,
+			status: http.StatusBadRequest,
+			auth:   func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:         "unknown material",
+			path:         "/v1/designs",
+			body:         `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","name":"stud","materialId":"11111111-2222-4333-8444-555555555555","roughCut":false,"lengthIn":8,"continuity":{"x":true,"y":false,"z":false},"transform":{"positionIn":[0,0,0],"rotationDeg":[0,0,0]}}],"connections":[]}}`,
+			validRequest: true,
+			status:       http.StatusConflict,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+				return store.Design{}, store.ErrMaterialMissing
+			},
+		},
+	},
+	"listDesigns": {{
+		name:         "live designs",
+		path:         "/v1/designs",
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		list: func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			return []store.DesignSummary{sampleDesign(1).DesignSummary}, nil
+		},
+	}},
+	"getDesign": {{
+		name:         "found",
+		path:         "/v1/designs/00000000-0000-4000-8000-000000000001",
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		get: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return sampleDesign(1), nil
+		},
+	}},
+	"replaceDesign": {{
+		name:         "replaced",
+		path:         "/v1/designs/00000000-0000-4000-8000-000000000001",
+		body:         `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`,
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			return sampleDesign(2), nil
+		},
+	}},
+	"deleteDesign": {{
+		name:         "deleted",
+		path:         "/v1/designs/00000000-0000-4000-8000-000000000001",
+		validRequest: true,
+		status:       http.StatusNoContent,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		delete: func(context.Context, store.UserID, store.DesignID) error {
+			return nil
+		},
+	}},
+}
+
+func sampleDesign(version int32) store.Design {
+	id, err := store.ParseDesignID("00000000-0000-4000-8000-000000000001")
+	if err != nil {
+		panic(err)
+	}
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		panic(err)
+	}
+	return store.Design{
+		DesignSummary: store.DesignSummary{
+			ID:          id,
+			Name:        name,
+			Description: "",
+			Version:     version,
+			UpdatedAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		},
+	}
 }
 
 var (
@@ -181,9 +282,28 @@ func bearerSecurity(doc *openapi3.T, op *openapi3.Operation) bool {
 func assertExchange(t *testing.T, router routers.Router, op operation, c exchange) {
 	t.Helper()
 	h := newStack(t, c)
-	req := httptest.NewRequest(op.method, op.path, nil)
+	path := op.path
+	if c.path != "" {
+		path = c.path
+	}
+	var payload *bytes.Reader
+	var reqBody io.Reader
+	if c.body != "" {
+		payload = bytes.NewReader([]byte(c.body))
+		reqBody = payload
+	}
+	req := httptest.NewRequest(op.method, path, reqBody)
+	if c.body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if c.validRequest {
+		req.Header.Set("Authorization", "Bearer token")
+	}
 	rr := httptest.NewRecorder()
 	h.ServeHTTP(rr, req)
+	if c.status != 0 && rr.Code != c.status {
+		t.Fatalf("status = %d, want %d, body = %s", rr.Code, c.status, rr.Body.Bytes())
+	}
 
 	route, params, err := router.FindRoute(req)
 	if err != nil {
@@ -191,6 +311,24 @@ func assertExchange(t *testing.T, router routers.Router, op operation, c exchang
 	}
 	if route.Operation.OperationID != op.op.OperationID {
 		t.Fatalf("route %s, want %s", route.Operation.OperationID, op.op.OperationID)
+	}
+	if c.validRequest {
+		if payload != nil {
+			if _, err := payload.Seek(0, io.SeekStart); err != nil {
+				t.Fatal(err)
+			}
+		}
+		err = openapi3filter.ValidateRequest(context.Background(), &openapi3filter.RequestValidationInput{
+			Request:    req,
+			PathParams: params,
+			Route:      route,
+			Options: &openapi3filter.Options{
+				AuthenticationFunc: openapi3filter.NoopAuthenticationFunc,
+			},
+		})
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
 	}
 	body := bytes.Clone(rr.Body.Bytes())
 	err = openapi3filter.ValidateResponse(context.Background(), &openapi3filter.ResponseValidationInput{
@@ -227,6 +365,30 @@ func newStack(t *testing.T, c exchange) http.Handler {
 	if display == nil {
 		display = func(context.Context, store.ClerkUserID) (string, error) { return "Ada", nil }
 	}
+	save := c.save
+	if save == nil {
+		save = func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		}
+	}
+	get := c.get
+	if get == nil {
+		get = func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		}
+	}
+	list := c.list
+	if list == nil {
+		list = func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			return nil, store.ErrNotFound
+		}
+	}
+	deleteDesign := c.delete
+	if deleteDesign == nil {
+		deleteDesign = func(context.Context, store.UserID, store.DesignID) error {
+			return store.ErrNotFound
+		}
+	}
 	checks := c.checks
 	if len(checks) == 0 {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
@@ -236,6 +398,10 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		Authenticate: auth,
 		EnsureUser:   ensure,
 		DisplayName:  display,
+		Save:         save,
+		Get:          get,
+		List:         list,
+		Delete:       deleteDesign,
 	})
 	if err != nil {
 		t.Fatal(err)

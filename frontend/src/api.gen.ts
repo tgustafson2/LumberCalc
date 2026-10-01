@@ -52,6 +52,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/designs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listDesigns"];
+        put?: never;
+        post: operations["createDesign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/designs/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getDesign"];
+        put: operations["replaceDesign"];
+        post?: never;
+        delete: operations["deleteDesign"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -82,6 +116,37 @@ export interface components {
             clerk_user_id: string;
             display_name: string;
         };
+        CreateDesignRequest: {
+            /** @description The server removes leading and trailing whitespace. A blank result is rejected. */
+            name: string;
+            description?: string;
+            document?: components["schemas"]["DesignDocument"];
+        };
+        ReplaceDesignRequest: {
+            /** @description The server removes leading and trailing whitespace. A blank result is rejected. */
+            name: string;
+            description?: string;
+            document: components["schemas"]["DesignDocument"];
+        };
+        DesignSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        Design: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            version: number;
+            /** Format: date-time */
+            updatedAt: string;
+            document: components["schemas"]["DesignDocument"];
+        };
         /** @description A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees. */
         DesignDocument: {
             /** @enum {integer} */
@@ -97,7 +162,7 @@ export interface components {
             materialId: components["schemas"]["DocumentUuid"];
             /** @default false */
             roughCut: boolean;
-            /** @description Exact inch length. The server stores the JSON number text as sent. */
+            /** @description Exact inch length. The numeric value stays exact. An exponent form can come back as a plain decimal. */
             lengthIn: number;
             continuity: components["schemas"]["DesignContinuity"];
             transform: components["schemas"]["DesignTransform"];
@@ -122,7 +187,7 @@ export interface components {
             joinType: "butt" | "lap" | "fastener";
             faceA: string;
             faceB: string;
-            /** @description Exact inches. The server stores the JSON number text as sent. */
+            /** @description Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal. */
             wasteIn: number;
         };
         /**
@@ -235,6 +300,277 @@ export interface operations {
                 };
             };
             /** @description The session check or the user row failed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDesigns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The caller's live designs, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignSummary"][];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The designs were not loaded. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDesignRequest"];
+            };
+        };
+        responses: {
+            /** @description The design was created. */
+            201: {
+                headers: {
+                    Location: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Design"];
+                };
+            };
+            /** @description The name or the document is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The document names a material that does not exist. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The design was not saved. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The design, including its document. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Design"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such design. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The design was not loaded. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replaceDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceDesignRequest"];
+            };
+        };
+        responses: {
+            /** @description The design was replaced. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Design"];
+                };
+            };
+            /** @description The name or the document is not valid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such design. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The document names a material that does not exist. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The design was not saved. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    deleteDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The design was deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such design. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The design was not deleted. */
             500: {
                 headers: {
                     [name: string]: unknown;

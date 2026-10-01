@@ -49,6 +49,10 @@ func run(ctx context.Context) error {
 		Authenticate: clerk.Authenticate,
 		EnsureUser:   st.EnsureUser,
 		DisplayName:  clerk.DisplayName,
+		Save:         st.Save,
+		Get:          st.Get,
+		List:         st.List,
+		Delete:       st.Delete,
 	})
 	if err != nil {
 		return err

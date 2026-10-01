@@ -5,6 +5,8 @@
 package q
 
 import (
+	"encoding/json"
+
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -14,7 +16,7 @@ type Design struct {
 	Name                string
 	Description         string
 	SchemaVersion       int32
-	Document            []byte
+	Document            json.RawMessage
 	Version             int32
 	CopiedFromDesignID  pgtype.UUID
 	CopiedFromPatternID pgtype.UUID

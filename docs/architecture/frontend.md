@@ -12,7 +12,7 @@
 - `frontend/src/api.gen.ts` is generated from `backend/openapi.yaml`. Do not edit it.
 - `frontend/vite.config.ts` serves `http://localhost:5173` and proxies `/v1` to `http://127.0.0.1:8080`.
 
-`openapi-typescript` writes `frontend/src/api.gen.ts` from `backend/openapi.yaml`. `frontend/src/api.ts` maps the snake_case response to the camelCase `Me` type. `toMe` is the only mapper.
+`openapi-typescript` writes `frontend/src/api.gen.ts` from `backend/openapi.yaml`. `frontend/src/api.ts` maps the snake_case `Me` response to camelCase. Design responses are already camelCase. `toSummary`, `toDesign`, and `toDesignList` check those responses and brand the design id.
 
 ## Rules for new code
 

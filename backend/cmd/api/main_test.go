@@ -28,6 +28,18 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
 			return "", nil
 		},
+		Save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		},
+		Get: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		},
+		List: func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			return nil, store.ErrNotFound
+		},
+		Delete: func(context.Context, store.UserID, store.DesignID) error {
+			return store.ErrNotFound
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

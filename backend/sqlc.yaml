@@ -8,3 +8,8 @@ sql:
         package: q
         out: internal/store/internal/q
         sql_package: pgx/v5
+        overrides:
+          - column: designs.document
+            go_type:
+              import: encoding/json
+              type: RawMessage
