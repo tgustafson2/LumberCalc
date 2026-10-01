@@ -237,3 +237,184 @@ func TestAccessLogIncludesRequestID(t *testing.T) {
 		t.Fatalf("access log not JSON: %v (%s)", err, line)
 	}
 }
+
+func TestCORSPreflightAllowed(t *testing.T) {
+	called := false
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		V1: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			called = true
+		}),
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/v1/me", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "authorization")
+	h.ServeHTTP(rr, req)
+	if rr.Code != 204 {
+		t.Fatalf("status = %d, want 204", rr.Code)
+	}
+	if called {
+		t.Fatal("/v1 handler was called")
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(got, "Authorization") {
+		t.Fatalf("Access-Control-Allow-Headers = %q", got)
+	}
+	if got := strings.Join(rr.Header().Values("Vary"), ", "); !strings.Contains(got, "Origin") {
+		t.Fatalf("Vary = %q", got)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Credentials"); got != "" {
+		t.Fatalf("Access-Control-Allow-Credentials = %q", got)
+	}
+}
+
+func TestCORSPreflightDisallowed(t *testing.T) {
+	called := false
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		V1: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(401)
+		}),
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/v1/me", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "authorization")
+	h.ServeHTTP(rr, req)
+	if !called {
+		t.Fatal("/v1 handler was not called")
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}
+
+func TestCORSActualUnauthorized(t *testing.T) {
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		V1: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(401)
+		}),
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	h.ServeHTTP(rr, req)
+	if rr.Code != 401 {
+		t.Fatalf("status = %d, want 401", rr.Code)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}
+
+func TestCORSNoOriginOnHealthz(t *testing.T) {
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	h.ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+	if got := strings.Join(rr.Header().Values("Vary"), ", "); !strings.Contains(got, "Origin") {
+		t.Fatalf("Vary = %q", got)
+	}
+}
+
+func TestCORSPanicKeepsAllowOrigin(t *testing.T) {
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		V1: http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+			panic("handler failed")
+		}),
+		CORSOrigins: []string{"http://localhost:5173"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/me", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	h.ServeHTTP(rr, req)
+	if rr.Code != 500 {
+		t.Fatalf("status = %d, want 500", rr.Code)
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "http://localhost:5173" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}
+
+func TestCORSDisabledWhenOriginsNil(t *testing.T) {
+	called := false
+	h, err := New(Deps{
+		Log: NewLogger(io.Discard, slog.LevelInfo),
+		Ready: []Check{{
+			Name:  "postgres",
+			Probe: func(context.Context) error { return nil },
+		}},
+		V1: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(401)
+		}),
+		CORSOrigins: nil,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodOptions, "/v1/me", nil)
+	req.Header.Set("Origin", "http://localhost:5173")
+	req.Header.Set("Access-Control-Request-Method", "GET")
+	req.Header.Set("Access-Control-Request-Headers", "authorization")
+	h.ServeHTTP(rr, req)
+	if !called {
+		t.Fatal("/v1 handler was not called")
+	}
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q", got)
+	}
+}

@@ -19,11 +19,13 @@ import (
 	"time"
 )
 
-// Deps is the logger, the readiness probes, and the optional /v1 handler.
+// Deps is the logger, the readiness probes, the optional /v1 handler,
+// and the browser origins that may call the API cross-origin.
 type Deps struct {
-	Log   *slog.Logger
-	Ready []Check
-	V1    http.Handler
+	Log         *slog.Logger
+	Ready       []Check
+	V1          http.Handler
+	CORSOrigins []string
 }
 
 // Check is one readiness probe. Name must be unique and non-empty, and Probe must be non-nil.
@@ -36,7 +38,8 @@ const readyTimeout = 2 * time.Second
 const shutdownGrace = 10 * time.Second
 
 // New requires a logger and at least one uniquely named check.
-// The chain is request id, then access log, then panic recovery, then the mux.
+// The chain is request id, then access log, then CORS, then panic recovery, then the mux.
+// CORS compares Origin to CORSOrigins by exact string. An empty list disables CORS.
 // /healthz does not run probes. /readyz runs every probe with a 2 second timeout.
 // A failing probe is 503, and the body lists names and ok flags without the error text.
 func New(d Deps) (http.Handler, error) {
@@ -68,7 +71,7 @@ func New(d Deps) (http.Handler, error) {
 	}
 	mux.HandleFunc("/", notFound)
 
-	return requestID(accessLog(d.Log, recoverPanic(d.Log, mux))), nil
+	return requestID(accessLog(d.Log, cors(newOrigins(d.CORSOrigins), recoverPanic(d.Log, mux)))), nil
 }
 
 // Serve listens on addr until ctx is canceled, then drains in-flight requests for 10 seconds.
@@ -211,6 +214,82 @@ func accessLog(log *slog.Logger, next http.Handler) http.Handler {
 			"bytes", rec.bytes,
 			"duration", time.Since(start).String(),
 		)
+	})
+}
+
+// origins is an exact-match allow-set built once. A bad entry cannot equal a browser Origin.
+type origins map[string]struct{}
+
+func newOrigins(list []string) origins {
+	o := make(origins, len(list))
+	for _, entry := range list {
+		o[entry] = struct{}{}
+	}
+	return o
+}
+
+// corsReply is the CORS decision for one request. The zero value is corsNone.
+type corsReply int
+
+const (
+	corsNone corsReply = iota
+	corsActual
+	corsPreflight
+)
+
+const (
+	corsAllowMethods = "GET, POST, PUT, PATCH, DELETE"
+	corsAllowHeaders = "Authorization, Content-Type"
+	corsMaxAge       = "600"
+)
+
+func (o origins) classify(r *http.Request) corsReply {
+	if _, ok := o.stored(r.Header.Get("Origin")); !ok {
+		return corsNone
+	}
+	if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+		return corsPreflight
+	}
+	return corsActual
+}
+
+// stored returns the allow-set entry equal to header.
+// The response echoes that entry.
+func (o origins) stored(header string) (string, bool) {
+	if header == "" {
+		return "", false
+	}
+	if _, ok := o[header]; !ok {
+		return "", false
+	}
+	return header, true
+}
+
+// cors sets Vary on every response because the representation depends on Origin.
+// It sets Access-Control-Allow-Origin before next so a 401 and a recovered 500 keep that header.
+func cors(o origins, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		h := w.Header()
+		h.Add("Vary", "Origin")
+		switch o.classify(r) {
+		case corsNone:
+			next.ServeHTTP(w, r)
+		case corsActual:
+			if key, ok := o.stored(r.Header.Get("Origin")); ok {
+				h.Set("Access-Control-Allow-Origin", key)
+			}
+			next.ServeHTTP(w, r)
+		case corsPreflight:
+			h.Add("Vary", "Access-Control-Request-Method")
+			h.Add("Vary", "Access-Control-Request-Headers")
+			if key, ok := o.stored(r.Header.Get("Origin")); ok {
+				h.Set("Access-Control-Allow-Origin", key)
+			}
+			h.Set("Access-Control-Allow-Methods", corsAllowMethods)
+			h.Set("Access-Control-Allow-Headers", corsAllowHeaders)
+			h.Set("Access-Control-Max-Age", corsMaxAge)
+			w.WriteHeader(http.StatusNoContent)
+		}
 	})
 }
 

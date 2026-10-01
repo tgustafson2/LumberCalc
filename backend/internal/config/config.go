@@ -4,9 +4,11 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 
@@ -16,6 +18,8 @@ import (
 // Config is validated process configuration.
 // HTTP_ADDR defaults to :8080 and LOG_LEVEL defaults to info.
 // CLERK_AUTHORIZED_PARTIES is required. A blank or comma-only value is rejected.
+// Each entry is an origin. The scheme is http or https. The entry has a host.
+// The entry has no user info, path, query, or fragment.
 type Config struct {
 	HTTPAddr               string
 	LogLevel               slog.Level
@@ -127,14 +131,32 @@ func clerkParties(raw string, ok bool) ([]string, error) {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
-		if p != "" {
-			out = append(out, p)
+		if p == "" {
+			continue
 		}
+		if !isOrigin(p) {
+			return nil, fmt.Errorf("CLERK_AUTHORIZED_PARTIES entry %q is not an origin", p)
+		}
+		out = append(out, p)
 	}
 	if len(out) == 0 {
 		return nil, errors.New("CLERK_AUTHORIZED_PARTIES is required")
 	}
 	return out, nil
+}
+
+// isOrigin reports whether s is an origin a browser can send.
+// A trailing slash is a path, so "http://localhost:5173/" is rejected.
+func isOrigin(s string) bool {
+	u, err := url.Parse(s)
+	if err != nil {
+		return false
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return false
+	}
+	return u.Host != "" && u.User == nil && u.Path == "" &&
+		u.RawQuery == "" && u.Fragment == "" && !u.ForceQuery
 }
 
 func parseLevel(raw string) (slog.Level, error) {

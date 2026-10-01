@@ -210,11 +210,11 @@ func TestParseMissingClerkSecretKey(t *testing.T) {
 	_, err := parse(func(key string) (string, bool) {
 		switch key {
 		case "DATABASE_URL":
-			return "postgres://localhost/db", true
+			return secret, true
 		case "CLERK_SECRET_KEY":
 			return "", true
 		case "CLERK_AUTHORIZED_PARTIES":
-			return secret, true
+			return "http://localhost:5173", true
 		default:
 			return "", false
 		}
@@ -273,6 +273,27 @@ func TestParseClerkAuthorizedParties(t *testing.T) {
 		got := cfg.ClerkAuthorizedParties
 		if len(got) != 2 || got[0] != "http://localhost:5173" || got[1] != "https://lumber.example" {
 			t.Fatalf("parties = %#v", got)
+		}
+	})
+	t.Run("trailing slash", func(t *testing.T) {
+		const entry = "http://localhost:5173/"
+		_, err := parse(lookupMap(map[string]string{
+			"DATABASE_URL":             "postgres://localhost/db",
+			"CLERK_SECRET_KEY":         "sk_test_config",
+			"CLERK_AUTHORIZED_PARTIES": entry,
+		}))
+		if err == nil || !strings.Contains(err.Error(), "CLERK_AUTHORIZED_PARTIES") || !strings.Contains(err.Error(), entry) {
+			t.Fatalf("err = %v", err)
+		}
+	})
+	t.Run("bare host", func(t *testing.T) {
+		_, err := parse(lookupMap(map[string]string{
+			"DATABASE_URL":             "postgres://localhost/db",
+			"CLERK_SECRET_KEY":         "sk_test_config",
+			"CLERK_AUTHORIZED_PARTIES": "localhost:5173",
+		}))
+		if err == nil || !strings.Contains(err.Error(), "localhost:5173") {
+			t.Fatalf("err = %v", err)
 		}
 	})
 }

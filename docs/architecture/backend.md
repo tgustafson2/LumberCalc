@@ -7,7 +7,7 @@ The packages in `AGENTS.md` are the backend layers. Put new code in one of those
 - `backend/cmd/api` starts the HTTP process. It wires config, Clerk, store, the `/v1` handler, and the server. The ready check calls `db.CheckApplied`.
 - `backend/cmd/migrate` applies the embedded SQL migrations.
 - `backend/internal/config` loads `.env` and the process environment. Process values win. A missing `.env` is not an error.
-- `backend/internal/server` is the process HTTP stack. `GET /healthz` and `GET /readyz` are public. The server mounts the `/v1` handler when that handler is set.
+- `backend/internal/server` is the process HTTP stack. `GET /healthz` and `GET /readyz` are public. The server mounts the `/v1` handler when that handler is set. CORS uses the same list as `CLERK_AUTHORIZED_PARTIES`. An exact match echoes the stored origin. Each response sets `Vary` to `Origin`. An allowed preflight ends before `/v1`. The response has no `Access-Control-Allow-Credentials` header.
 - `backend/internal/api` is `/v1`. Every path under `/v1` requires a Clerk session, including unknown paths. A handler parses the request, calls store or Clerk, and writes the response. Keep the handler thin.
 - `backend/internal/clerkauth` verifies Clerk session JWTs and loads display names. `azp` must equal a party passed to `New`. A blank `azp` is rejected.
 - `backend/internal/store` is the database boundary. `UserID` and `ClerkUserID` are constructed only there.

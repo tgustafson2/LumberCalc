@@ -59,7 +59,8 @@ func run(ctx context.Context) error {
 			{Name: "postgres", Probe: pool.Ping},
 			{Name: "migrations", Probe: func(ctx context.Context) error { return db.CheckApplied(ctx, pool) }},
 		},
-		V1: v1,
+		V1:          v1,
+		CORSOrigins: cfg.ClerkAuthorizedParties,
 	})
 	if err != nil {
 		return err
