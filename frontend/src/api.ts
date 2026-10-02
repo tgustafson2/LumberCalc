@@ -56,6 +56,7 @@ export type V1Client = {
     options?: RequestOptions,
   ) => Promise<V1Result<Design>>;
   readonly deleteDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<null>>;
+  readonly copyDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<Design>>;
 };
 
 type TokenSource = () => Promise<string | null>;
@@ -108,6 +109,13 @@ export function createV1Client(options: {
         options.getToken,
         (headers) => http.DELETE("/v1/designs/{id}", { params: { path: { id } }, signal, headers }),
         () => ({ kind: "invalid" }),
+      ),
+    copyDesign: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.POST("/v1/designs/{id}/copy", { params: { path: { id } }, signal, headers }),
+        toDesign,
       ),
   };
 }

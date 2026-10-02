@@ -29,6 +29,7 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		Get:    st.Get,
 		List:   st.List,
 		Delete: st.Delete,
+		Copy:   st.Copy,
 	})
 	if err != nil {
 		t.Fatal(err)

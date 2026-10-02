@@ -40,6 +40,9 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		Delete: func(context.Context, store.UserID, store.DesignID) error {
 			return store.ErrNotFound
 		},
+		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

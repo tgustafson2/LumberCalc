@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/json"
 	"io"
 	"regexp"
@@ -93,6 +94,61 @@ func (d Document) materialIDs() []materialID {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+func (d Document) fork() (Document, error) {
+	pieces := make([]piece, len(d.pieces))
+	copy(pieces, d.pieces)
+	taken := make(map[string]struct{}, len(pieces))
+	for i := range pieces {
+		taken[pieces[i].id] = struct{}{}
+	}
+	remap := make(map[string]string, len(pieces))
+	for i := range pieces {
+		next, err := mintID(taken)
+		if err != nil {
+			return Document{}, err
+		}
+		remap[pieces[i].id] = next
+		pieces[i].id = next
+	}
+	connections := make([]connection, len(d.connections))
+	copy(connections, d.connections)
+	for i := range connections {
+		next, err := newV4()
+		if err != nil {
+			return Document{}, err
+		}
+		connections[i].id = next
+		connections[i].pieceA = remap[connections[i].pieceA]
+		connections[i].pieceB = remap[connections[i].pieceB]
+	}
+	return Document{pieces: pieces, connections: connections}, nil
+}
+
+func mintID(taken map[string]struct{}) (string, error) {
+	for {
+		id, err := newV4()
+		if err != nil {
+			return "", err
+		}
+		if _, ok := taken[id]; ok {
+			continue
+		}
+		taken[id] = struct{}{}
+		return id, nil
+	}
+}
+
+func newV4() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	// Version 4 and the RFC 4122 variant.
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return formatUUID(b), nil
 }
 
 type materialID struct{ v [16]byte }

@@ -204,6 +204,30 @@ func TestPostMeWithASessionReturns404(t *testing.T) {
 	assertNotFound(t, rr)
 }
 
+func TestNewRejectsANilCopy(t *testing.T) {
+	_, err := New(Deps{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: okAuth,
+		EnsureUser:   okEnsure,
+		DisplayName:  okName,
+		Save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			return store.Design{}, nil
+		},
+		Get: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, nil
+		},
+		List: func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			return nil, nil
+		},
+		Delete: func(context.Context, store.UserID, store.DesignID) error {
+			return nil
+		},
+	})
+	if err == nil || err.Error() != "copy is required" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func newHandler(
 	t *testing.T,
 	auth func(*http.Request) (store.ClerkUserID, error),
@@ -246,6 +270,10 @@ func newHandlerWithLog(
 		Delete: func(context.Context, store.UserID, store.DesignID) error {
 			t.Fatal("delete was called")
 			return nil
+		},
+		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			t.Fatal("copy was called")
+			return store.Design{}, nil
 		},
 	})
 	if err != nil {

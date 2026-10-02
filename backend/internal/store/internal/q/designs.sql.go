@@ -55,6 +55,61 @@ func (q *Queries) GetLiveDesign(ctx context.Context, arg GetLiveDesignParams) (D
 	return i, err
 }
 
+const insertCopiedDesign = `-- name: InsertCopiedDesign :one
+INSERT INTO designs (
+    owner_id,
+    name,
+    description,
+    schema_version,
+    document,
+    copied_from_design_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
+`
+
+type InsertCopiedDesignParams struct {
+	OwnerID            pgtype.UUID
+	Name               string
+	Description        string
+	SchemaVersion      int32
+	Document           json.RawMessage
+	CopiedFromDesignID pgtype.UUID
+}
+
+func (q *Queries) InsertCopiedDesign(ctx context.Context, arg InsertCopiedDesignParams) (Design, error) {
+	row := q.db.QueryRow(ctx, insertCopiedDesign,
+		arg.OwnerID,
+		arg.Name,
+		arg.Description,
+		arg.SchemaVersion,
+		arg.Document,
+		arg.CopiedFromDesignID,
+	)
+	var i Design
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Description,
+		&i.SchemaVersion,
+		&i.Document,
+		&i.Version,
+		&i.CopiedFromDesignID,
+		&i.CopiedFromPatternID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
 const insertDesign = `-- name: InsertDesign :one
 INSERT INTO designs (
     owner_id,
@@ -161,6 +216,40 @@ func (q *Queries) ListLiveDesigns(ctx context.Context, ownerID pgtype.UUID) ([]L
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockLiveDesign = `-- name: LockLiveDesign :one
+SELECT id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
+FROM designs
+WHERE id = $1
+  AND owner_id = $2
+  AND deleted_at IS NULL
+FOR UPDATE
+`
+
+type LockLiveDesignParams struct {
+	ID      pgtype.UUID
+	OwnerID pgtype.UUID
+}
+
+func (q *Queries) LockLiveDesign(ctx context.Context, arg LockLiveDesignParams) (Design, error) {
+	row := q.db.QueryRow(ctx, lockLiveDesign, arg.ID, arg.OwnerID)
+	var i Design
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerID,
+		&i.Name,
+		&i.Description,
+		&i.SchemaVersion,
+		&i.Document,
+		&i.Version,
+		&i.CopiedFromDesignID,
+		&i.CopiedFromPatternID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const softDeleteDesign = `-- name: SoftDeleteDesign :execrows

@@ -53,6 +53,7 @@ func run(ctx context.Context) error {
 		Get:          st.Get,
 		List:         st.List,
 		Delete:       st.Delete,
+		Copy:         st.Copy,
 	})
 	if err != nil {
 		return err

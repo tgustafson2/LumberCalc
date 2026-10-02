@@ -131,16 +131,7 @@ func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, er
 		if err := qtx.DeleteDesignUsages(ctx, row.ID); err != nil {
 			return err
 		}
-		for _, id := range doc.materialIDs() {
-			err := qtx.InsertDesignUsage(ctx, q.InsertDesignUsageParams{
-				DesignID:   row.ID,
-				MaterialID: uuidPG(id.v),
-			})
-			if err != nil {
-				return usageErr(err)
-			}
-		}
-		return nil
+		return insertUsages(ctx, qtx, row.ID, doc.materialIDs())
 	})
 	if err != nil {
 		return Design{}, err
@@ -192,6 +183,74 @@ func (s *Store) Delete(ctx context.Context, owner UserID, id DesignID) error {
 	}
 	if n == 0 {
 		return ErrNotFound
+	}
+	return nil
+}
+
+// Copy deep-clones one live design that this owner still has.
+// A second call inserts another design. It does not return the first clone.
+// A missing, foreign, or soft-deleted source is ErrNotFound.
+// The clone's copied_from_design_id is the source.
+// The clone's copied_from_pattern_id is null, including when the source points at a pattern.
+// The source row is not updated.
+func (s *Store) Copy(ctx context.Context, owner UserID, id DesignID) (Design, error) {
+	var row q.Design
+	err := s.withTx(ctx, func(qtx *q.Queries) error {
+		locked, err := qtx.LockLiveDesign(ctx, q.LockLiveDesignParams{
+			ID:      uuidPG(id.v),
+			OwnerID: uuidPG(owner.v),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		source, err := designFromRow(locked)
+		if err != nil {
+			return err
+		}
+		cloned, err := source.Document.fork()
+		if err != nil {
+			return err
+		}
+		raw, err := json.Marshal(cloned)
+		if err != nil {
+			return err
+		}
+		row, err = qtx.InsertCopiedDesign(ctx, q.InsertCopiedDesignParams{
+			OwnerID:            uuidPG(owner.v),
+			Name:               copyName(source.Name).String(),
+			Description:        source.Description,
+			SchemaVersion:      cloned.schemaVersion(),
+			Document:           raw,
+			CopiedFromDesignID: uuidPG(source.ID.v),
+		})
+		if err != nil {
+			return err
+		}
+		return insertUsages(ctx, qtx, row.ID, cloned.materialIDs())
+	})
+	if err != nil {
+		return Design{}, err
+	}
+	return designFromRow(row)
+}
+
+// copyName is the only copy title. Names are not unique, so a repeated copy keeps this title.
+func copyName(source Name) Name {
+	return Name{s: source.s + " copy"}
+}
+
+func insertUsages(ctx context.Context, qtx *q.Queries, designID pgtype.UUID, ids []materialID) error {
+	for _, id := range ids {
+		err := qtx.InsertDesignUsage(ctx, q.InsertDesignUsageParams{
+			DesignID:   designID,
+			MaterialID: uuidPG(id.v),
+		})
+		if err != nil {
+			return usageErr(err)
+		}
 	}
 	return nil
 }

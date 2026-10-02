@@ -36,6 +36,7 @@ type Deps struct {
 	Get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 	List         func(context.Context, store.UserID) ([]store.DesignSummary, error)
 	Delete       func(context.Context, store.UserID, store.DesignID) error
+	Copy         func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -76,6 +77,9 @@ func New(d Deps) (http.Handler, error) {
 	if d.Delete == nil {
 		return nil, errors.New("delete is required")
 	}
+	if d.Copy == nil {
+		return nil, errors.New("copy is required")
+	}
 	a := &API{d: d, mux: http.NewServeMux()}
 	a.handle("GET /v1/me", a.me)
 	a.handle("POST /v1/designs", a.createDesign)
@@ -83,6 +87,7 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("GET /v1/designs/{id}", a.getDesign)
 	a.handle("PUT /v1/designs/{id}", a.replaceDesign)
 	a.handle("DELETE /v1/designs/{id}", a.deleteDesign)
+	a.handle("POST /v1/designs/{id}/copy", a.copyDesign)
 	a.handle("/v1/", a.notFound)
 	return a.mux, nil
 }

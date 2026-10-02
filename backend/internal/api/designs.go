@@ -85,6 +85,36 @@ func (a *API) replaceDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	server.WriteJSON(w, http.StatusOK, toDesign(design))
 }
 
+func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
+	id, err := store.ParseDesignID(r.PathValue("id"))
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	if err := rejectCopyBody(r.Body); err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	design, err := a.d.Copy(r.Context(), c.UserID(), id)
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	w.Header().Set("Location", "/v1/designs/"+design.ID.String())
+	server.WriteJSON(w, http.StatusCreated, toDesign(design))
+}
+
+func rejectCopyBody(body io.Reader) error {
+	raw, err := io.ReadAll(io.LimitReader(body, maxDesignBody+1))
+	if err != nil {
+		return err
+	}
+	if len(raw) > maxDesignBody || len(bytes.TrimSpace(raw)) != 0 {
+		return errBadBody
+	}
+	return nil
+}
+
 func (a *API) deleteDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	id, err := store.ParseDesignID(r.PathValue("id"))
 	if err != nil {

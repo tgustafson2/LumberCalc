@@ -38,6 +38,7 @@ type exchange struct {
 	get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 	list         func(context.Context, store.UserID) ([]store.DesignSummary, error)
 	delete       func(context.Context, store.UserID, store.DesignID) error
+	copy         func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 }
 
 var exchanges = map[string][]exchange{
@@ -155,6 +156,26 @@ var exchanges = map[string][]exchange{
 			return nil
 		},
 	}},
+	"copyDesign": {
+		{
+			name:         "copied",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/copy",
+			validRequest: true,
+			status:       http.StatusCreated,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+				return sampleDesign(1), nil
+			},
+		},
+		{
+			name:         "body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/copy",
+			body:         `{}`,
+			validRequest: false,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+	},
 }
 
 func sampleDesign(version int32) store.Design {
@@ -389,6 +410,12 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.ErrNotFound
 		}
 	}
+	copyDesign := c.copy
+	if copyDesign == nil {
+		copyDesign = func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, store.ErrNotFound
+		}
+	}
 	checks := c.checks
 	if len(checks) == 0 {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
@@ -402,6 +429,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		Get:          get,
 		List:         list,
 		Delete:       deleteDesign,
+		Copy:         copyDesign,
 	})
 	if err != nil {
 		t.Fatal(err)

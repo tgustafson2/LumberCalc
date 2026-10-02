@@ -73,7 +73,6 @@ type Store struct {
 func New(pool *pgxpool.Pool) *Store { return &Store{pool: pool, q: q.New(pool)} }
 
 // withTx runs fn in one transaction.
-// Save uses it so the design row and its usage rows commit together.
 func (s *Store) withTx(ctx context.Context, fn func(*q.Queries) error) error {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {

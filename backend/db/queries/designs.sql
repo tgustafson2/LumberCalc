@@ -35,6 +35,32 @@ WHERE id = sqlc.arg('id')
   AND owner_id = sqlc.arg('owner_id')
   AND deleted_at IS NULL;
 
+-- name: LockLiveDesign :one
+SELECT *
+FROM designs
+WHERE id = sqlc.arg('id')
+  AND owner_id = sqlc.arg('owner_id')
+  AND deleted_at IS NULL
+FOR UPDATE;
+
+-- name: InsertCopiedDesign :one
+INSERT INTO designs (
+    owner_id,
+    name,
+    description,
+    schema_version,
+    document,
+    copied_from_design_id
+) VALUES (
+    sqlc.arg('owner_id'),
+    sqlc.arg('name'),
+    sqlc.arg('description'),
+    sqlc.arg('schema_version'),
+    sqlc.arg('document'),
+    sqlc.arg('copied_from_design_id')
+)
+RETURNING *;
+
 -- name: ListLiveDesigns :many
 SELECT id, name, description, version, updated_at
 FROM designs
