@@ -123,7 +123,6 @@ func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, er
 				BaseVersion:   d.Base,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
-				// A full Get unmarshals the document and can hide a stale write.
 				exists, existsErr := qtx.LiveDesignExists(ctx, q.LiveDesignExistsParams{
 					ID:      uuidPG(d.ID.v),
 					OwnerID: uuidPG(owner.v),
