@@ -52,7 +52,7 @@ export type V1Client = {
   readonly getDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<Design>>;
   readonly replaceDesign: (
     id: DesignId,
-    body: { name: string; description?: string; document: DesignDocument },
+    body: { name: string; description?: string; document: DesignDocument; version: number },
     options?: RequestOptions,
   ) => Promise<V1Result<Design>>;
   readonly deleteDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<null>>;

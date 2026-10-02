@@ -138,7 +138,7 @@ var exchanges = map[string][]exchange{
 	"replaceDesign": {{
 		name:         "replaced",
 		path:         "/v1/designs/00000000-0000-4000-8000-000000000001",
-		body:         `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`,
+		body:         `{"name":"Bench","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`,
 		validRequest: true,
 		status:       http.StatusOK,
 		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },

@@ -80,7 +80,7 @@ func TestGetDesignReturnsTheDocument(t *testing.T) {
 }
 
 func TestReplaceDesignIncrementsVersion(t *testing.T) {
-	const body = `{"name":"Bench","description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`
+	const body = `{"name":"Bench","description":"cut list","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`
 	h := designHandler(t, func(_ context.Context, _ store.UserID, draft store.Draft) (store.Design, error) {
 		replaced, ok := draft.(store.ReplaceDraft)
 		if !ok {
@@ -88,6 +88,9 @@ func TestReplaceDesignIncrementsVersion(t *testing.T) {
 		}
 		if replaced.ID.String() != designID {
 			t.Fatalf("id = %s", replaced.ID)
+		}
+		if replaced.Base != 1 {
+			t.Fatalf("base = %d, want 1", replaced.Base)
 		}
 		return benchDesign(t, replaced.Name, replaced.Description, 2, replaced.Document), nil
 	}, nil, nil, nil, nil)
@@ -128,7 +131,7 @@ func TestDeleteDesignThenGetReturns404(t *testing.T) {
 		t.Fatalf("body = %s", gone.Body.String())
 	}
 	assertNotFound(t, callJSON(h, http.MethodGet, "/v1/designs/"+designID, ""))
-	assertNotFound(t, callJSON(h, http.MethodPut, "/v1/designs/"+designID, `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`))
+	assertNotFound(t, callJSON(h, http.MethodPut, "/v1/designs/"+designID, `{"name":"Bench","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`))
 	assertNotFound(t, callJSON(h, http.MethodDelete, "/v1/designs/"+designID, ""))
 }
 
@@ -146,7 +149,12 @@ func TestDesignRejectsABadBody(t *testing.T) {
 		{name: "unknown key", method: http.MethodPost, path: "/v1/designs", body: `{"name":"Bench","extra":1}`},
 		{name: "bad document", method: http.MethodPost, path: "/v1/designs", body: `{"name":"Bench","document":{}}`},
 		{name: "null description", method: http.MethodPost, path: "/v1/designs", body: `{"name":"Bench","description":null}`},
-		{name: "missing document", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench"}`},
+		{name: "missing document", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":1}`},
+		{name: "missing version", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
+		{name: "version zero", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":0,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
+		{name: "version fraction", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":1.5,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
+		{name: "version string", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":"1","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
+		{name: "create version", method: http.MethodPost, path: "/v1/designs", body: `{"name":"Bench","version":1}`},
 		{name: "body too large", method: http.MethodPost, path: "/v1/designs", body: `{"name":"` + strings.Repeat("a", maxDesignBody) + `"}`},
 	}
 	for _, tt := range tests {
@@ -162,6 +170,19 @@ func TestDesignRejectsABadBody(t *testing.T) {
 	}
 	if !strings.Contains(log.String(), "/schemaVersion") {
 		t.Fatalf("log = %s", log.String())
+	}
+}
+
+func TestReplaceStaleVersionReturns409(t *testing.T) {
+	h := designHandler(t, func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+		return store.Design{}, store.ErrStale
+	}, nil, nil, nil, nil)
+	rr := callJSON(h, http.MethodPut, "/v1/designs/"+designID, `{"name":"Bench","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`)
+	if rr.Code != http.StatusConflict {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if strings.TrimSpace(rr.Body.String()) != `{"error":"stale version"}` {
+		t.Fatalf("body = %s", rr.Body.String())
 	}
 }
 

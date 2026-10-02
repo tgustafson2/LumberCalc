@@ -218,6 +218,28 @@ func (q *Queries) ListLiveDesigns(ctx context.Context, ownerID pgtype.UUID) ([]L
 	return items, nil
 }
 
+const liveDesignExists = `-- name: LiveDesignExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM designs
+    WHERE id = $1
+      AND owner_id = $2
+      AND deleted_at IS NULL
+)
+`
+
+type LiveDesignExistsParams struct {
+	ID      pgtype.UUID
+	OwnerID pgtype.UUID
+}
+
+func (q *Queries) LiveDesignExists(ctx context.Context, arg LiveDesignExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, liveDesignExists, arg.ID, arg.OwnerID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const lockLiveDesign = `-- name: LockLiveDesign :one
 SELECT id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
 FROM designs
@@ -286,6 +308,7 @@ SET
 WHERE id = $5
   AND owner_id = $6
   AND deleted_at IS NULL
+  AND version = $7
 RETURNING id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
 `
 
@@ -296,6 +319,7 @@ type UpdateLiveDesignParams struct {
 	SchemaVersion int32
 	ID            pgtype.UUID
 	OwnerID       pgtype.UUID
+	BaseVersion   int32
 }
 
 func (q *Queries) UpdateLiveDesign(ctx context.Context, arg UpdateLiveDesignParams) (Design, error) {
@@ -306,6 +330,7 @@ func (q *Queries) UpdateLiveDesign(ctx context.Context, arg UpdateLiveDesignPara
 		arg.SchemaVersion,
 		arg.ID,
 		arg.OwnerID,
+		arg.BaseVersion,
 	)
 	var i Design
 	err := row.Scan(

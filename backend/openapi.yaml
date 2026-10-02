@@ -228,7 +228,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Design"
         "400":
-          description: The name or the document is not valid.
+          description: The name, the document, or the version is not valid.
           content:
             application/json:
               schema:
@@ -252,7 +252,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/Error"
         "409":
-          description: The document names a material that does not exist.
+          description: A version that does not match sets error to stale version and leaves the row unchanged. A missing material sets error to conflict.
           content:
             application/json:
               schema:
@@ -439,7 +439,7 @@ components:
     ReplaceDesignRequest:
       type: object
       additionalProperties: false
-      required: [name, document]
+      required: [name, document, version]
       properties:
         name:
           type: string
@@ -449,6 +449,10 @@ components:
           type: string
         document:
           $ref: "#/components/schemas/DesignDocument"
+        version:
+          type: integer
+          minimum: 1
+          description: The designs.version value from the last read. The server compares this integer. A match stores version plus 1.
     DesignSummary:
       type: object
       additionalProperties: false

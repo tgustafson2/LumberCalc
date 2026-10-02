@@ -26,7 +26,17 @@ SET
 WHERE id = sqlc.arg('id')
   AND owner_id = sqlc.arg('owner_id')
   AND deleted_at IS NULL
+  AND version = sqlc.arg('base_version')
 RETURNING *;
+
+-- name: LiveDesignExists :one
+SELECT EXISTS (
+    SELECT 1
+    FROM designs
+    WHERE id = sqlc.arg('id')
+      AND owner_id = sqlc.arg('owner_id')
+      AND deleted_at IS NULL
+);
 
 -- name: GetLiveDesign :one
 SELECT *

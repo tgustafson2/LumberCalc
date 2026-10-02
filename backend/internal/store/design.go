@@ -72,6 +72,7 @@ type ReplaceDraft struct {
 	Name        Name
 	Description string
 	Document    Document
+	Base        int32
 }
 
 func (CreateDraft) draftKind()  {}
@@ -82,6 +83,7 @@ var (
 	ErrBadDesignID     = errors.New("design id is not a uuid")
 	ErrBlankName       = errors.New("design name is blank")
 	ErrMaterialMissing = errors.New("design material is missing")
+	ErrStale           = errors.New("stale version")
 )
 
 func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, error) {
@@ -118,9 +120,21 @@ func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, er
 				SchemaVersion: doc.schemaVersion(),
 				ID:            uuidPG(d.ID.v),
 				OwnerID:       uuidPG(owner.v),
+				BaseVersion:   d.Base,
 			})
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrNotFound
+				// A full Get unmarshals the document and can hide a stale write.
+				exists, existsErr := qtx.LiveDesignExists(ctx, q.LiveDesignExistsParams{
+					ID:      uuidPG(d.ID.v),
+					OwnerID: uuidPG(owner.v),
+				})
+				if existsErr != nil {
+					return existsErr
+				}
+				if !exists {
+					return ErrNotFound
+				}
+				return ErrStale
 			}
 			if err != nil {
 				return err

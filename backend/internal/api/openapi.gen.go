@@ -64,6 +64,9 @@ type ReplaceDesignRequest struct {
 
 	// Name The server removes leading and trailing whitespace. A blank result is rejected.
 	Name string `json:"name"`
+
+	// Version The designs.version value from the last read. The server compares this integer. A match stores version plus 1.
+	Version int `json:"version"`
 }
 
 // bearerContextKey is the context key for bearer security scheme

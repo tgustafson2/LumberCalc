@@ -116,11 +116,13 @@ func TestSaveGetListDelete(t *testing.T) {
 		t.Fatalf("empty document usages = %v", usages)
 	}
 
+	next := testDocument(t, oak, pine)
 	replaced, err := s.Save(ctx, owner, store.ReplaceDraft{
 		ID:          created.ID,
 		Name:        name,
 		Description: "cut list",
-		Document:    testDocument(t, oak, pine),
+		Document:    next,
+		Base:        created.Version,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +130,7 @@ func TestSaveGetListDelete(t *testing.T) {
 	if replaced.Version != 2 {
 		t.Fatalf("version = %d, want 2", replaced.Version)
 	}
+	assertDocument(t, replaced.Document, next)
 	if replaced.Description != "cut list" {
 		t.Fatalf("description = %q", replaced.Description)
 	}
@@ -144,6 +147,7 @@ func TestSaveGetListDelete(t *testing.T) {
 		ID:       created.ID,
 		Name:     name,
 		Document: store.Document{},
+		Base:     replaced.Version,
 	})
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("foreign replace err = %v", err)
@@ -191,6 +195,7 @@ func TestSaveGetListDelete(t *testing.T) {
 		ID:       created.ID,
 		Name:     name,
 		Document: store.Document{},
+		Base:     replaced.Version,
 	})
 	if !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("replace after delete err = %v", err)
@@ -239,6 +244,7 @@ func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 		ID:       created.ID,
 		Name:     name,
 		Document: testDocument(t, "99999999-9999-4999-8999-999999999999"),
+		Base:     created.Version,
 	})
 	if !errors.Is(err, store.ErrMaterialMissing) {
 		t.Fatalf("err = %v", err)
@@ -268,6 +274,95 @@ func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("design rows = %d, want 1", n)
+	}
+}
+
+func TestReplaceStaleLeavesTheStoredDocument(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	oak := insertMaterial(t, pool, owner, "oak")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := testDocument(t, oak)
+	replaced, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: next,
+		Base:     created.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replaced.Version != 2 {
+		t.Fatalf("version = %d, want 2", replaced.Version)
+	}
+	assertDocument(t, replaced.Document, next)
+
+	_, err = s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: store.Document{},
+		Base:     created.Version,
+	})
+	if !errors.Is(err, store.ErrStale) {
+		t.Fatalf("err = %v, want ErrStale", err)
+	}
+	got, err := s.Get(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 2 {
+		t.Fatalf("version after stale = %d, want 2", got.Version)
+	}
+	assertDocument(t, got.Document, next)
+
+	_, err = s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: store.Document{},
+		Base:     0,
+	})
+	if !errors.Is(err, store.ErrStale) {
+		t.Fatalf("base 0 err = %v, want ErrStale", err)
+	}
+
+	missing, err := store.ParseDesignID("00000000-0000-4000-8000-000000000099")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       missing,
+		Name:     name,
+		Document: store.Document{},
+		Base:     1,
+	})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing replace err = %v", err)
+	}
+
+	if err := s.Delete(ctx, owner, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: store.Document{},
+		Base:     replaced.Version,
+	})
+	if !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("replace after delete err = %v", err)
 	}
 }
 

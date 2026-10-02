@@ -145,6 +145,8 @@ export interface components {
             name: string;
             description?: string;
             document: components["schemas"]["DesignDocument"];
+            /** @description The designs.version value from the last read. The server compares this integer. A match stores version plus 1. */
+            version: number;
         };
         DesignSummary: {
             /** Format: uuid */
@@ -503,7 +505,7 @@ export interface operations {
                     "application/json": components["schemas"]["Design"];
                 };
             };
-            /** @description The name or the document is not valid. */
+            /** @description The name, the document, or the version is not valid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -531,7 +533,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The document names a material that does not exist. */
+            /** @description A version that does not match sets error to stale version and leaves the row unchanged. A missing material sets error to conflict. */
             409: {
                 headers: {
                     [name: string]: unknown;
