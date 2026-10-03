@@ -222,6 +222,78 @@ func TestSaveGetListDelete(t *testing.T) {
 	}
 }
 
+func TestListHidesForeignAndDeleted(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	other := testUser(t, s, "user_other")
+
+	benchName, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bench, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     benchName,
+		Document: store.Document{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stoolName, err := store.ParseName("Stool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stool, err := s.Save(ctx, other, store.CreateDraft{
+		Name:     stoolName,
+		Document: store.Document{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed, err := s.List(ctx, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != stool.ID {
+		t.Fatalf("other list = %+v, want [%s]", listed, stool.ID)
+	}
+	if listHasID(listed, bench.ID) {
+		t.Fatalf("other list contains %s", bench.ID)
+	}
+
+	listed, err = s.List(ctx, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != bench.ID {
+		t.Fatalf("owner list = %+v, want [%s]", listed, bench.ID)
+	}
+	if listHasID(listed, stool.ID) {
+		t.Fatalf("owner list contains %s", stool.ID)
+	}
+
+	if err := s.Delete(ctx, owner, bench.ID); err != nil {
+		t.Fatal(err)
+	}
+	listed, err = s.List(ctx, owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if listed == nil || len(listed) != 0 {
+		t.Fatalf("owner list = %#v, want an empty slice", listed)
+	}
+
+	listed, err = s.List(ctx, other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(listed) != 1 || listed[0].ID != stool.ID {
+		t.Fatalf("other list = %+v, want [%s]", listed, stool.ID)
+	}
+}
+
 func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 	pool := dbtest.Migrated(t)
 	s := store.New(pool)
@@ -751,6 +823,15 @@ func usageMaterialIDs(t *testing.T, pool *pgxpool.Pool, id store.DesignID) []str
 		t.Fatal(err)
 	}
 	return ids
+}
+
+func listHasID(rows []store.DesignSummary, id store.DesignID) bool {
+	for _, row := range rows {
+		if row.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 func sameStrings(got, want []string) bool {
