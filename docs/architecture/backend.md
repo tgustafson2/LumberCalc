@@ -41,3 +41,11 @@ Parse and validate at the HTTP boundary, the config boundary, and the Clerk boun
 Do not add a new package unless the responsibility cannot belong to an existing package.
 
 Do not add Docker, Compose, Redis, Terraform, or AWS unless the task asks for them. The current runtime is a local Postgres database and the Go process.
+
+## Optimize errors
+
+An empty design is a valid document. `POST /v1/designs` and `PUT /v1/designs/{id}` accept that document.
+
+`POST /v1/designs/{id}/optimize` returns HTTP 400 when the design has no pieces. The optimization run status is `failed`. The `error_code` is `empty_design`.
+
+When you add that operation, move these rules onto the operation. Delete this section in that same change.
