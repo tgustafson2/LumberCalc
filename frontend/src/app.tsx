@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { SignIn, SignOutButton, useAuth, useClerk } from "@clerk/clerk-react";
+import { SignIn, useAuth, useClerk } from "@clerk/clerk-react";
 import {
   Link,
   Outlet,
@@ -8,9 +8,11 @@ import {
   createRoute,
   createRouter,
   redirect,
-  useRouter,
 } from "@tanstack/react-router";
 import { createV1Client } from "./api";
+import { DesignDetailPage } from "./designs/detail-page";
+import { DesignsListPage } from "./designs/list-page";
+import { designActions, loadDesignDetail, loadDesignList } from "./designs/model";
 import { redirectFor, type SessionGate } from "./gate";
 
 type ResolvedGate = Exclude<SessionGate, { kind: "loading" }>;
@@ -77,13 +79,21 @@ const designsRoute = createRoute({
   getParentRoute: () => signedInBranch,
   path: "/designs",
   loader: ({ context, abortController }) =>
-    context.api.me({ signal: abortController.signal }),
-  component: DesignsPage,
+    loadDesignList(context.api, abortController.signal),
+  component: DesignsListRoute,
+});
+
+const designDetailRoute = createRoute({
+  getParentRoute: () => signedInBranch,
+  path: "/designs/$designId",
+  loader: ({ context, params, abortController }) =>
+    loadDesignDetail(context.api, params.designId, abortController.signal),
+  component: DesignDetailRoute,
 });
 
 const routeTree = rootRoute.addChildren([
   signedOutBranch.addChildren([signInRoute]),
-  signedInBranch.addChildren([designsRoute]),
+  signedInBranch.addChildren([designsRoute, designDetailRoute]),
 ]);
 
 function buildRouter(gate: ResolvedGate) {
@@ -120,88 +130,17 @@ function SignInPage() {
   );
 }
 
-function DesignsPage() {
-  const result = designsRoute.useLoaderData();
-  const router = useRouter();
-  switch (result.kind) {
-    case "ok":
-      return (
-        <main>
-          <h1>Designs for {result.value.displayName}</h1>
-          <SignOutButton />
-        </main>
-      );
-    case "no-token":
-      return <MissingToken onRetry={() => router.invalidate()} />;
-    case "unauthorized":
-      return <SessionRejected />;
-    case "unreachable":
-      return (
-        <Retry
-          message="The API is not reachable."
-          onRetry={() => router.invalidate()}
-        />
-      );
-    case "invalid":
-      return (
-        <Retry
-          message="The API sent an unexpected response."
-          onRetry={() => router.invalidate()}
-        />
-      );
-    case "failed":
-      return (
-        <Retry message={result.message} onRetry={() => router.invalidate()} />
-      );
-    default: {
-      const _exhaustive: never = result;
-      return _exhaustive;
-    }
-  }
+function DesignsListRoute() {
+  const model = designsRoute.useLoaderData();
+  const { api } = designsRoute.useRouteContext();
+  const { create, copy, delete: remove } = designActions(api);
+  return <DesignsListPage model={model} actions={{ create, copy, delete: remove }} />;
 }
 
-function MissingToken({ onRetry }: { readonly onRetry: () => void }) {
-  return (
-    <main>
-      <h1>Clerk did not provide a session token.</h1>
-      <button type="button" onClick={onRetry}>
-        Try again
-      </button>
-      <SignOutButton />
-    </main>
-  );
-}
-
-function SessionRejected() {
-  return (
-    <main>
-      <h1>The API rejected this session.</h1>
-      <p>Open http://localhost:5173, not 127.0.0.1.</p>
-      <p>CLERK_AUTHORIZED_PARTIES must be http://localhost:5173.</p>
-      <p>
-        The publishable key and CLERK_SECRET_KEY must come from the same Clerk
-        instance.
-      </p>
-      <SignOutButton />
-    </main>
-  );
-}
-
-function Retry({
-  message,
-  onRetry,
-}: {
-  readonly message: string;
-  readonly onRetry: () => void;
-}) {
-  return (
-    <main>
-      <p>{message}</p>
-      <button type="button" onClick={onRetry}>
-        Try again
-      </button>
-    </main>
-  );
+function DesignDetailRoute() {
+  const model = designDetailRoute.useLoaderData();
+  const { api } = designDetailRoute.useRouteContext();
+  return <DesignDetailPage model={model} rename={designActions(api).rename} />;
 }
 
 function NotFound() {

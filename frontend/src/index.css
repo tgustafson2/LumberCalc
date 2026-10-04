@@ -9,3 +9,18 @@ body {
 button {
   font: inherit;
 }
+
+input {
+  font: inherit;
+  margin-inline-start: 0.5rem;
+}
+
+ul {
+  padding-inline-start: 1.25rem;
+}
+
+pre {
+  overflow: auto;
+  padding: 1rem;
+  background: #f4f4f4;
+}
