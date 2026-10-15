@@ -10,6 +10,8 @@ export type ClerkUserId = Brand<string, "ClerkUserId">;
 
 export type DesignId = Brand<string, "DesignId">;
 
+export type MaterialId = Brand<string, "MaterialId">;
+
 export type Me = {
   readonly userId: UserId;
   readonly clerkUserId: ClerkUserId;
@@ -28,6 +30,33 @@ export type DesignSummary = {
 
 export type Design = DesignSummary & {
   readonly document: DesignDocument;
+};
+
+export type MaterialWrite = {
+  readonly name: string;
+  readonly species?: string | null;
+  readonly grade?: string | null;
+  readonly nominalThicknessIn: number;
+  readonly nominalWidthIn: number;
+  readonly actualThicknessIn: number;
+  readonly actualWidthIn: number;
+  readonly roughThicknessIn: number;
+  readonly roughWidthIn: number;
+};
+
+export type Material = {
+  readonly id: MaterialId;
+  readonly name: string;
+  readonly species: string | null;
+  readonly grade: string | null;
+  readonly system: boolean;
+  readonly nominalThicknessIn: number;
+  readonly nominalWidthIn: number;
+  readonly actualThicknessIn: number;
+  readonly actualWidthIn: number;
+  readonly roughThicknessIn: number;
+  readonly roughWidthIn: number;
+  readonly updatedAt: string;
 };
 
 export type V1Result<T> =
@@ -57,6 +86,14 @@ export type V1Client = {
   ) => Promise<V1Result<Design>>;
   readonly deleteDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<null>>;
   readonly copyDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<Design>>;
+  readonly createMaterial: (body: MaterialWrite, options?: RequestOptions) => Promise<V1Result<Material>>;
+  readonly listMaterials: (options?: RequestOptions) => Promise<V1Result<readonly Material[]>>;
+  readonly replaceMaterial: (
+    id: MaterialId,
+    body: MaterialWrite,
+    options?: RequestOptions,
+  ) => Promise<V1Result<Material>>;
+  readonly deleteMaterial: (id: MaterialId, options?: RequestOptions) => Promise<V1Result<null>>;
 };
 
 type TokenSource = () => Promise<string | null>;
@@ -116,6 +153,32 @@ export function createV1Client(options: {
         (headers) =>
           http.POST("/v1/designs/{id}/copy", { params: { path: { id } }, signal, headers }),
         toDesign,
+      ),
+    createMaterial: (body, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.POST("/v1/materials", { body, signal, headers }),
+        toMaterial,
+      ),
+    listMaterials: ({ signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.GET("/v1/materials", { signal, headers }),
+        toMaterialList,
+      ),
+    replaceMaterial: (id, body, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.PUT("/v1/materials/{id}", { params: { path: { id } }, body, signal, headers }),
+        toMaterial,
+      ),
+    deleteMaterial: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.DELETE("/v1/materials/{id}", { params: { path: { id } }, signal, headers }),
+        () => ({ kind: "invalid" }),
       ),
   };
 }
@@ -202,6 +265,73 @@ function toSummary(wire: Wire["DesignSummary"]): Parsed<DesignSummary> {
       updatedAt,
     },
   };
+}
+
+function toMaterial(wire: Wire["Material"]): Parsed<Material> {
+  const id = text(wire.id);
+  const name = text(wire.name);
+  const updatedAt = text(wire.updatedAt);
+  const species = nullableText(wire.species);
+  const grade = nullableText(wire.grade);
+  if (
+    id === null ||
+    name === null ||
+    updatedAt === null ||
+    species === undefined ||
+    grade === undefined ||
+    typeof wire.system !== "boolean" ||
+    !positiveNumber(wire.nominalThicknessIn) ||
+    !positiveNumber(wire.nominalWidthIn) ||
+    !positiveNumber(wire.actualThicknessIn) ||
+    !positiveNumber(wire.actualWidthIn) ||
+    !positiveNumber(wire.roughThicknessIn) ||
+    !positiveNumber(wire.roughWidthIn)
+  ) {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "ok",
+    value: {
+      id: id as MaterialId,
+      name,
+      species,
+      grade,
+      system: wire.system,
+      nominalThicknessIn: wire.nominalThicknessIn,
+      nominalWidthIn: wire.nominalWidthIn,
+      actualThicknessIn: wire.actualThicknessIn,
+      actualWidthIn: wire.actualWidthIn,
+      roughThicknessIn: wire.roughThicknessIn,
+      roughWidthIn: wire.roughWidthIn,
+      updatedAt,
+    },
+  };
+}
+
+function toMaterialList(wire: readonly Wire["Material"][]): Parsed<readonly Material[]> {
+  const values: Material[] = [];
+  for (const item of wire) {
+    const material = toMaterial(item);
+    if (material.kind !== "ok") {
+      return material;
+    }
+    values.push(material.value);
+  }
+  return { kind: "ok", value: values };
+}
+
+function nullableText(value: unknown): string | null | undefined {
+  if (value === null) {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  return value;
+}
+
+function positiveNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
 function toMe(wire: Wire["Me"]): Parsed<Me> {

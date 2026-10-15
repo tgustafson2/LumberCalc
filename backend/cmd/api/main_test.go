@@ -43,6 +43,18 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 			return store.Design{}, store.ErrNotFound
 		},
+		CreateMaterial: func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
+			return store.Material{}, store.ErrMaterialNotFound
+		},
+		ListMaterials: func(context.Context, store.UserID) ([]store.Material, error) {
+			return nil, store.ErrMaterialNotFound
+		},
+		UpdateMaterial: func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error) {
+			return store.Material{}, store.ErrMaterialNotFound
+		},
+		DeleteMaterial: func(context.Context, store.UserID, store.MaterialID) error {
+			return store.ErrMaterialNotFound
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -321,15 +321,19 @@ func designHandlerWithLog(
 		}
 	}
 	h, err := New(Deps{
-		Log:          slog.New(slog.NewTextHandler(w, nil)),
-		Authenticate: okAuth,
-		EnsureUser:   okEnsure,
-		DisplayName:  okName,
-		Save:         save,
-		Get:          get,
-		List:         list,
-		Delete:       del,
-		Copy:         copy,
+		Log:            slog.New(slog.NewTextHandler(w, nil)),
+		Authenticate:   okAuth,
+		EnsureUser:     okEnsure,
+		DisplayName:    okName,
+		Save:           save,
+		Get:            get,
+		List:           list,
+		Delete:         del,
+		Copy:           copy,
+		CreateMaterial: idleCreateMaterial,
+		ListMaterials:  idleListMaterials,
+		UpdateMaterial: idleUpdateMaterial,
+		DeleteMaterial: idleDeleteMaterial,
 	})
 	if err != nil {
 		t.Fatal(err)

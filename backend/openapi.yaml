@@ -352,6 +352,191 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/materials:
+    post:
+      operationId: createMaterial
+      tags: [v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialWrite"
+      responses:
+        "201":
+          description: The material was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "400":
+          description: The name or an inch field is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The caller already has a material with this name. The error is name already used.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The material was not saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listMaterials
+      tags: [v1]
+      responses:
+        "200":
+          description: System materials and the caller's materials, ordered by name.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Material"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The materials were not loaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/materials/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: replaceMaterial
+      tags: [v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaterialWrite"
+      responses:
+        "200":
+          description: The material was replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Material"
+        "400":
+          description: The name or an inch field is not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The material is a system row or is owned by someone else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No material has this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The caller already has a material with this name. The error is name already used.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The material was not saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deleteMaterial
+      tags: [v1]
+      responses:
+        "204":
+          description: The material was deleted.
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: The material is a system row or is owned by someone else.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No material has this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: A price or a design usage references the material. The error is material in use.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The material was not deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   securitySchemes:
     bearer:
@@ -598,3 +783,93 @@ components:
       description: A client-generated UUID. Unique among piece ids in one document. It is not a database key.
       type: string
       format: uuid
+    Inches:
+      type: number
+      minimum: 0
+      exclusiveMinimum: true
+      x-go-type: json.Number
+      x-go-type-import:
+        path: encoding/json
+        name: Number
+      description: Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+    MaterialWrite:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - nominalThicknessIn
+        - nominalWidthIn
+        - actualThicknessIn
+        - actualWidthIn
+        - roughThicknessIn
+        - roughWidthIn
+      properties:
+        name:
+          type: string
+          minLength: 1
+          description: The server removes leading and trailing whitespace. A blank result is rejected.
+        species:
+          type: string
+          nullable: true
+        grade:
+          type: string
+          nullable: true
+        nominalThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        nominalWidthIn:
+          $ref: "#/components/schemas/Inches"
+        actualThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        actualWidthIn:
+          $ref: "#/components/schemas/Inches"
+        roughThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        roughWidthIn:
+          $ref: "#/components/schemas/Inches"
+    Material:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - species
+        - grade
+        - system
+        - nominalThicknessIn
+        - nominalWidthIn
+        - actualThicknessIn
+        - actualWidthIn
+        - roughThicknessIn
+        - roughWidthIn
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        name:
+          type: string
+          minLength: 1
+        species:
+          type: string
+          nullable: true
+        grade:
+          type: string
+          nullable: true
+        system:
+          type: boolean
+        nominalThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        nominalWidthIn:
+          $ref: "#/components/schemas/Inches"
+        actualThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        actualWidthIn:
+          $ref: "#/components/schemas/Inches"
+        roughThicknessIn:
+          $ref: "#/components/schemas/Inches"
+        roughWidthIn:
+          $ref: "#/components/schemas/Inches"
+        updatedAt:
+          type: string
+          format: date-time

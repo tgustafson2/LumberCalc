@@ -4,6 +4,7 @@
 package api
 
 import (
+	"encoding/json"
 	"time"
 
 	"lumbercalc/backend/internal/store"
@@ -48,6 +49,62 @@ type DesignSummary struct {
 	Version     int       `json:"version"`
 }
 
+// Inches Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+type Inches = json.Number
+
+// Material defines model for Material.
+type Material struct {
+	// ActualThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	ActualThicknessIn Inches `json:"actualThicknessIn"`
+
+	// ActualWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	ActualWidthIn Inches  `json:"actualWidthIn"`
+	Grade         *string `json:"grade"`
+	Id            string  `json:"id"`
+	Name          string  `json:"name"`
+
+	// NominalThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	NominalThicknessIn Inches `json:"nominalThicknessIn"`
+
+	// NominalWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	NominalWidthIn Inches `json:"nominalWidthIn"`
+
+	// RoughThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	RoughThicknessIn Inches `json:"roughThicknessIn"`
+
+	// RoughWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	RoughWidthIn Inches    `json:"roughWidthIn"`
+	Species      *string   `json:"species"`
+	System       bool      `json:"system"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// MaterialWrite defines model for MaterialWrite.
+type MaterialWrite struct {
+	// ActualThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	ActualThicknessIn Inches `json:"actualThicknessIn"`
+
+	// ActualWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	ActualWidthIn Inches  `json:"actualWidthIn"`
+	Grade         *string `json:"grade,omitempty"`
+
+	// Name The server removes leading and trailing whitespace. A blank result is rejected.
+	Name string `json:"name"`
+
+	// NominalThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	NominalThicknessIn Inches `json:"nominalThicknessIn"`
+
+	// NominalWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	NominalWidthIn Inches `json:"nominalWidthIn"`
+
+	// RoughThicknessIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	RoughThicknessIn Inches `json:"roughThicknessIn"`
+
+	// RoughWidthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	RoughWidthIn Inches  `json:"roughWidthIn"`
+	Species      *string `json:"species,omitempty"`
+}
+
 // Me defines model for Me.
 type Me struct {
 	ClerkUserId string `json:"clerk_user_id"`
@@ -77,3 +134,9 @@ type CreateDesignJSONRequestBody = CreateDesignRequest
 
 // ReplaceDesignJSONRequestBody defines body for ReplaceDesign for application/json ContentType.
 type ReplaceDesignJSONRequestBody = ReplaceDesignRequest
+
+// CreateMaterialJSONRequestBody defines body for CreateMaterial for application/json ContentType.
+type CreateMaterialJSONRequestBody = MaterialWrite
+
+// ReplaceMaterialJSONRequestBody defines body for ReplaceMaterial for application/json ContentType.
+type ReplaceMaterialJSONRequestBody = MaterialWrite

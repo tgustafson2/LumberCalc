@@ -25,20 +25,24 @@ import (
 )
 
 type exchange struct {
-	name         string
-	checks       []server.Check
-	auth         func(*http.Request) (store.ClerkUserID, error)
-	ensure       func(context.Context, store.ClerkUserID) (store.UserID, error)
-	display      func(context.Context, store.ClerkUserID) (string, error)
-	path         string
-	body         string
-	validRequest bool
-	status       int
-	save         func(context.Context, store.UserID, store.Draft) (store.Design, error)
-	get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	list         func(context.Context, store.UserID) ([]store.DesignSummary, error)
-	delete       func(context.Context, store.UserID, store.DesignID) error
-	copy         func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	name           string
+	checks         []server.Check
+	auth           func(*http.Request) (store.ClerkUserID, error)
+	ensure         func(context.Context, store.ClerkUserID) (store.UserID, error)
+	display        func(context.Context, store.ClerkUserID) (string, error)
+	path           string
+	body           string
+	validRequest   bool
+	status         int
+	save           func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	get            func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	list           func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	delete         func(context.Context, store.UserID, store.DesignID) error
+	copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
+	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
+	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
+	deleteMaterial func(context.Context, store.UserID, store.MaterialID) error
 }
 
 var exchanges = map[string][]exchange{
@@ -176,6 +180,46 @@ var exchanges = map[string][]exchange{
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
 		},
 	},
+	"createMaterial": {{
+		name:         "created",
+		body:         materialBody,
+		validRequest: true,
+		status:       http.StatusCreated,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		createMaterial: func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
+			return sampleMaterial(), nil
+		},
+	}},
+	"listMaterials": {{
+		name:         "empty",
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		listMaterials: func(context.Context, store.UserID) ([]store.Material, error) {
+			return []store.Material{}, nil
+		},
+	}},
+	"replaceMaterial": {{
+		name:         "forbidden",
+		path:         "/v1/materials/00000000-0000-4000-8000-000000000001",
+		body:         materialBody,
+		validRequest: true,
+		status:       http.StatusForbidden,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		updateMaterial: func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error) {
+			return store.Material{}, store.ErrNotOwner
+		},
+	}},
+	"deleteMaterial": {{
+		name:         "deleted",
+		path:         "/v1/materials/00000000-0000-4000-8000-000000000001",
+		validRequest: true,
+		status:       http.StatusNoContent,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		deleteMaterial: func(context.Context, store.UserID, store.MaterialID) error {
+			return nil
+		},
+	}},
 }
 
 func sampleDesign(version int32) store.Design {
@@ -206,6 +250,37 @@ var (
 type probeError string
 
 func (e probeError) Error() string { return string(e) }
+
+const materialBody = `{"name":"Pine","nominalThicknessIn":2,"nominalWidthIn":4,"actualThicknessIn":1.5,"actualWidthIn":3.5,"roughThicknessIn":1.75,"roughWidthIn":3.5}`
+
+func sampleMaterial() store.Material {
+	name, err := store.ParseName("Pine")
+	if err != nil {
+		panic(err)
+	}
+	id, err := store.ParseMaterialID("00000000-0000-4000-8000-000000000001")
+	if err != nil {
+		panic(err)
+	}
+	inches := func(raw string) store.Inches {
+		n, err := store.ParseInches(raw)
+		if err != nil {
+			panic(err)
+		}
+		return n
+	}
+	return store.Material{
+		ID:                 id,
+		Name:               name,
+		NominalThicknessIn: inches("2"),
+		NominalWidthIn:     inches("4"),
+		ActualThicknessIn:  inches("1.5"),
+		ActualWidthIn:      inches("3.5"),
+		RoughThicknessIn:   inches("1.75"),
+		RoughWidthIn:       inches("3.5"),
+		UpdatedAt:          time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+	}
+}
 
 func mustClerk(raw string) store.ClerkUserID {
 	id, err := store.ParseClerkUserID(raw)
@@ -416,20 +491,48 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.Design{}, store.ErrNotFound
 		}
 	}
+	createMaterial := c.createMaterial
+	if createMaterial == nil {
+		createMaterial = func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
+			return store.Material{}, store.ErrMaterialNotFound
+		}
+	}
+	listMaterials := c.listMaterials
+	if listMaterials == nil {
+		listMaterials = func(context.Context, store.UserID) ([]store.Material, error) {
+			return []store.Material{}, nil
+		}
+	}
+	updateMaterial := c.updateMaterial
+	if updateMaterial == nil {
+		updateMaterial = func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error) {
+			return store.Material{}, store.ErrMaterialNotFound
+		}
+	}
+	deleteMaterial := c.deleteMaterial
+	if deleteMaterial == nil {
+		deleteMaterial = func(context.Context, store.UserID, store.MaterialID) error {
+			return store.ErrMaterialNotFound
+		}
+	}
 	checks := c.checks
 	if len(checks) == 0 {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
 	}
 	v1, err := api.New(api.Deps{
-		Log:          log,
-		Authenticate: auth,
-		EnsureUser:   ensure,
-		DisplayName:  display,
-		Save:         save,
-		Get:          get,
-		List:         list,
-		Delete:       deleteDesign,
-		Copy:         copyDesign,
+		Log:            log,
+		Authenticate:   auth,
+		EnsureUser:     ensure,
+		DisplayName:    display,
+		Save:           save,
+		Get:            get,
+		List:           list,
+		Delete:         deleteDesign,
+		Copy:           copyDesign,
+		CreateMaterial: createMaterial,
+		ListMaterials:  listMaterials,
+		UpdateMaterial: updateMaterial,
+		DeleteMaterial: deleteMaterial,
 	})
 	if err != nil {
 		t.Fatal(err)
