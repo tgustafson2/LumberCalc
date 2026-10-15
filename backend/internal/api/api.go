@@ -28,15 +28,19 @@ func (c Caller) UserID() store.UserID       { return c.user }
 // Deps supplies logging, the session check, the user row, the display name, and design writes.
 // New rejects a nil logger or a nil callback.
 type Deps struct {
-	Log          *slog.Logger
-	Authenticate func(*http.Request) (store.ClerkUserID, error)
-	EnsureUser   func(context.Context, store.ClerkUserID) (store.UserID, error)
-	DisplayName  func(context.Context, store.ClerkUserID) (string, error)
-	Save         func(context.Context, store.UserID, store.Draft) (store.Design, error)
-	Get          func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	List         func(context.Context, store.UserID) ([]store.DesignSummary, error)
-	Delete       func(context.Context, store.UserID, store.DesignID) error
-	Copy         func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	Log            *slog.Logger
+	Authenticate   func(*http.Request) (store.ClerkUserID, error)
+	EnsureUser     func(context.Context, store.ClerkUserID) (store.UserID, error)
+	DisplayName    func(context.Context, store.ClerkUserID) (string, error)
+	Save           func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	Get            func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	List           func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	Delete         func(context.Context, store.UserID, store.DesignID) error
+	Copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	CreateMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
+	ListMaterials  func(context.Context, store.UserID) ([]store.Material, error)
+	UpdateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
+	DeleteMaterial func(context.Context, store.UserID, store.MaterialID) error
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -80,6 +84,18 @@ func New(d Deps) (http.Handler, error) {
 	if d.Copy == nil {
 		return nil, errors.New("copy is required")
 	}
+	if d.CreateMaterial == nil {
+		return nil, errors.New("create material is required")
+	}
+	if d.ListMaterials == nil {
+		return nil, errors.New("list materials is required")
+	}
+	if d.UpdateMaterial == nil {
+		return nil, errors.New("update material is required")
+	}
+	if d.DeleteMaterial == nil {
+		return nil, errors.New("delete material is required")
+	}
 	a := &API{d: d, mux: http.NewServeMux()}
 	a.handle("GET /v1/me", a.me)
 	a.handle("POST /v1/designs", a.createDesign)
@@ -88,6 +104,10 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("PUT /v1/designs/{id}", a.replaceDesign)
 	a.handle("DELETE /v1/designs/{id}", a.deleteDesign)
 	a.handle("POST /v1/designs/{id}/copy", a.copyDesign)
+	a.handle("POST /v1/materials", a.createMaterial)
+	a.handle("GET /v1/materials", a.listMaterials)
+	a.handle("PUT /v1/materials/{id}", a.replaceMaterial)
+	a.handle("DELETE /v1/materials/{id}", a.deleteMaterial)
 	a.handle("/v1/", a.notFound)
 	return a.mux, nil
 }

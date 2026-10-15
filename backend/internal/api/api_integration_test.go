@@ -27,11 +27,15 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
 			return "Ada", nil
 		},
-		Save:   st.Save,
-		Get:    st.Get,
-		List:   st.List,
-		Delete: st.Delete,
-		Copy:   st.Copy,
+		Save:           st.Save,
+		Get:            st.Get,
+		List:           st.List,
+		Delete:         st.Delete,
+		Copy:           st.Copy,
+		CreateMaterial: st.CreateMaterial,
+		ListMaterials:  st.ListMaterials,
+		UpdateMaterial: st.UpdateMaterial,
+		DeleteMaterial: st.DeleteMaterial,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -76,11 +80,15 @@ func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {
 		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
 			return "Ada", nil
 		},
-		Save:   st.Save,
-		Get:    st.Get,
-		List:   st.List,
-		Delete: st.Delete,
-		Copy:   st.Copy,
+		Save:           st.Save,
+		Get:            st.Get,
+		List:           st.List,
+		Delete:         st.Delete,
+		Copy:           st.Copy,
+		CreateMaterial: st.CreateMaterial,
+		ListMaterials:  st.ListMaterials,
+		UpdateMaterial: st.UpdateMaterial,
+		DeleteMaterial: st.DeleteMaterial,
 	})
 	if err != nil {
 		t.Fatal(err)

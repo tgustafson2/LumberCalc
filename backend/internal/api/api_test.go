@@ -222,6 +222,10 @@ func TestNewRejectsANilCopy(t *testing.T) {
 		Delete: func(context.Context, store.UserID, store.DesignID) error {
 			return nil
 		},
+		CreateMaterial: idleCreateMaterial,
+		ListMaterials:  idleListMaterials,
+		UpdateMaterial: idleUpdateMaterial,
+		DeleteMaterial: idleDeleteMaterial,
 	})
 	if err == nil || err.Error() != "copy is required" {
 		t.Fatalf("err = %v", err)
@@ -275,6 +279,10 @@ func newHandlerWithLog(
 			t.Fatal("copy was called")
 			return store.Design{}, nil
 		},
+		CreateMaterial: idleCreateMaterial,
+		ListMaterials:  idleListMaterials,
+		UpdateMaterial: idleUpdateMaterial,
+		DeleteMaterial: idleDeleteMaterial,
 	})
 	if err != nil {
 		t.Fatal(err)

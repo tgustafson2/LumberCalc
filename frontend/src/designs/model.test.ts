@@ -90,6 +90,10 @@ function client(methods: Partial<V1Client>): V1Client {
     replaceDesign: async () => ({ kind: "invalid" }),
     deleteDesign: async () => ({ kind: "invalid" }),
     copyDesign: async () => ({ kind: "invalid" }),
+    createMaterial: async () => ({ kind: "invalid" }),
+    listMaterials: async () => ({ kind: "invalid" }),
+    replaceMaterial: async () => ({ kind: "invalid" }),
+    deleteMaterial: async () => ({ kind: "invalid" }),
     ...methods,
   };
 }

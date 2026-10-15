@@ -45,15 +45,19 @@ func run(ctx context.Context) error {
 		return err
 	}
 	v1, err := api.New(api.Deps{
-		Log:          log,
-		Authenticate: clerk.Authenticate,
-		EnsureUser:   st.EnsureUser,
-		DisplayName:  clerk.DisplayName,
-		Save:         st.Save,
-		Get:          st.Get,
-		List:         st.List,
-		Delete:       st.Delete,
-		Copy:         st.Copy,
+		Log:            log,
+		Authenticate:   clerk.Authenticate,
+		EnsureUser:     st.EnsureUser,
+		DisplayName:    clerk.DisplayName,
+		Save:           st.Save,
+		Get:            st.Get,
+		List:           st.List,
+		Delete:         st.Delete,
+		Copy:           st.Copy,
+		CreateMaterial: st.CreateMaterial,
+		ListMaterials:  st.ListMaterials,
+		UpdateMaterial: st.UpdateMaterial,
+		DeleteMaterial: st.DeleteMaterial,
 	})
 	if err != nil {
 		return err
