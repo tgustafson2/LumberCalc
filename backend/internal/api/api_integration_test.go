@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -59,6 +60,117 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 	if rowID == "00000000-0000-0000-0000-000000000000" {
 		t.Fatal("row id is the zero uuid")
 	}
+}
+
+func TestGetMaterialsReturnsTheSystemCatalog(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	const clerk = "user_materials_catalog"
+	st := store.New(pool)
+	h, err := New(Deps{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: func(*http.Request) (store.ClerkUserID, error) {
+			return mustClerk(t, clerk), nil
+		},
+		EnsureUser: st.EnsureUser,
+		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
+			return "Ada", nil
+		},
+		Save:           st.Save,
+		Get:            st.Get,
+		List:           st.List,
+		Delete:         st.Delete,
+		Copy:           st.Copy,
+		CreateMaterial: st.CreateMaterial,
+		ListMaterials:  st.ListMaterials,
+		UpdateMaterial: st.UpdateMaterial,
+		DeleteMaterial: st.DeleteMaterial,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rr := call(h, http.MethodGet, "/v1/materials", "Bearer token")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	var body []Material
+	if err := json.Unmarshal(rr.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body) != 17 {
+		t.Fatalf("len = %d, want 17", len(body))
+	}
+	want := map[string][4]string{
+		"1x2":  {"1", "2", "0.75", "1.5"},
+		"1x3":  {"1", "3", "0.75", "2.5"},
+		"1x4":  {"1", "4", "0.75", "3.5"},
+		"1x6":  {"1", "6", "0.75", "5.5"},
+		"1x8":  {"1", "8", "0.75", "7.25"},
+		"1x10": {"1", "10", "0.75", "9.25"},
+		"1x12": {"1", "12", "0.75", "11.25"},
+		"2x2":  {"2", "2", "1.5", "1.5"},
+		"2x3":  {"2", "3", "1.5", "2.5"},
+		"2x4":  {"2", "4", "1.5", "3.5"},
+		"2x6":  {"2", "6", "1.5", "5.5"},
+		"2x8":  {"2", "8", "1.5", "7.25"},
+		"2x10": {"2", "10", "1.5", "9.25"},
+		"2x12": {"2", "12", "1.5", "11.25"},
+		"4x4":  {"4", "4", "3.5", "3.5"},
+		"4x6":  {"4", "6", "3.5", "5.5"},
+		"6x6":  {"6", "6", "5.5", "5.5"},
+	}
+	quarter := big.NewRat(1, 4)
+	index := map[string]int{}
+	for i, row := range body {
+		if !row.System {
+			t.Fatalf("%s system = false", row.Name)
+		}
+		if row.Species != nil || row.Grade != nil {
+			t.Fatalf("%s species = %#v grade = %#v, want nil", row.Name, row.Species, row.Grade)
+		}
+		size, ok := want[row.Name]
+		if !ok {
+			t.Fatalf("name = %q", row.Name)
+		}
+		if row.NominalThicknessIn.String() != size[0] || row.NominalWidthIn.String() != size[1] ||
+			row.ActualThicknessIn.String() != size[2] || row.ActualWidthIn.String() != size[3] {
+			t.Fatalf("%s nominal = %s x %s actual = %s x %s, want %s x %s and %s x %s",
+				row.Name,
+				row.NominalThicknessIn, row.NominalWidthIn,
+				row.ActualThicknessIn, row.ActualWidthIn,
+				size[0], size[1], size[2], size[3])
+		}
+		if row.Name == "2x4" && (row.RoughThicknessIn.String() != "1.75" || row.RoughWidthIn.String() != "3.5") {
+			t.Fatalf("2x4 rough = %s x %s, want 1.75 x 3.5", row.RoughThicknessIn, row.RoughWidthIn)
+		}
+		actualT := inchesRat(t, row.ActualThicknessIn)
+		roughT := inchesRat(t, row.RoughThicknessIn)
+		if roughT.Cmp(new(big.Rat).Add(new(big.Rat).Set(actualT), quarter)) != 0 {
+			t.Fatalf("%s rough thickness = %s, want actual %s + 0.25", row.Name, row.RoughThicknessIn, row.ActualThicknessIn)
+		}
+		if inchesRat(t, row.RoughWidthIn).Cmp(inchesRat(t, row.ActualWidthIn)) != 0 {
+			t.Fatalf("%s rough width = %s, want actual width %s", row.Name, row.RoughWidthIn, row.ActualWidthIn)
+		}
+		if i > 0 && row.Name < body[i-1].Name {
+			t.Fatalf("names = %s then %s", body[i-1].Name, row.Name)
+		}
+		index[row.Name] = i
+		delete(want, row.Name)
+	}
+	if len(want) != 0 {
+		t.Fatalf("missing = %v", want)
+	}
+	if index["1x10"] > index["1x2"] {
+		t.Fatalf("1x10 index = %d, 1x2 index = %d", index["1x10"], index["1x2"])
+	}
+}
+
+func inchesRat(t *testing.T, n json.Number) *big.Rat {
+	t.Helper()
+	rat, ok := new(big.Rat).SetString(n.String())
+	if !ok {
+		t.Fatalf("inches = %q", n.String())
+	}
+	return rat
 }
 
 func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {

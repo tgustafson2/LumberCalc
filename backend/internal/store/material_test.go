@@ -50,12 +50,49 @@ func TestMaterials(t *testing.T) {
 	owner := testUser(t, s, "user_material_owner")
 	other := testUser(t, s, "user_material_other")
 
-	empty, err := s.ListMaterials(ctx, owner)
+	catalog, err := s.ListMaterials(ctx, owner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if empty == nil || len(empty) != 0 {
-		t.Fatalf("list = %#v, want an empty slice", empty)
+	if len(catalog) != 17 {
+		t.Fatalf("list len = %d, want 17", len(catalog))
+	}
+	var twoByFour store.Material
+	var sawTwoByFour bool
+	for _, row := range catalog {
+		if !row.System {
+			t.Fatalf("%s system = false", row.Name)
+		}
+		if row.Species != nil {
+			t.Fatalf("%s species = %#v, want nil", row.Name, row.Species)
+		}
+		if row.Grade != nil {
+			t.Fatalf("%s grade = %#v, want nil", row.Name, row.Grade)
+		}
+		if row.Name.String() == "2x4" {
+			twoByFour = row
+			sawTwoByFour = true
+		}
+	}
+	if !sawTwoByFour {
+		t.Fatal("list has no 2x4")
+	}
+	if twoByFour.ActualThicknessIn.String() != "1.5" || twoByFour.ActualWidthIn.String() != "3.5" {
+		t.Fatalf("2x4 actual = %s x %s, want 1.5 x 3.5", twoByFour.ActualThicknessIn, twoByFour.ActualWidthIn)
+	}
+	if twoByFour.RoughThicknessIn.String() != "1.75" || twoByFour.RoughWidthIn.String() != "3.5" {
+		t.Fatalf("2x4 rough = %s x %s, want 1.75 x 3.5", twoByFour.RoughThicknessIn, twoByFour.RoughWidthIn)
+	}
+
+	ownedTwoByFour, err := s.CreateMaterial(ctx, owner, lumberInput(t, "2x4", "  "))
+	if err != nil {
+		t.Fatalf("user 2x4 err = %v", err)
+	}
+	if ownedTwoByFour.System {
+		t.Fatal("user 2x4 is system")
+	}
+	if ownedTwoByFour.Name.String() != "2x4" {
+		t.Fatalf("name = %s, want 2x4", ownedTwoByFour.Name)
 	}
 
 	systemID := insertSystemMaterial(t, pool, "Doug Fir")

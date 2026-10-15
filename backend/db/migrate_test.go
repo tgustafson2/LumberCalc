@@ -159,7 +159,7 @@ func TestLoad(t *testing.T) {
 }
 
 func TestEmbeddedIsInit(t *testing.T) {
-	if g := names(embedded); !slices.Equal(g, []string{"001_init"}) {
-		t.Fatalf("embedded = %v, want [001_init]", g)
+	if g := names(embedded); !slices.Equal(g, []string{"001_init", "002_seed_dimensional_lumber"}) {
+		t.Fatalf("embedded = %v, want [001_init 002_seed_dimensional_lumber]", g)
 	}
 }

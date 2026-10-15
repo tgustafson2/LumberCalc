@@ -35,7 +35,7 @@ func TestMigrateAgainstPostgres(t *testing.T) {
 			t.Fatalf("run %d: %v", i, errs[i])
 		}
 		switch {
-		case slices.Equal(results[i], []string{"001_init"}):
+		case slices.Equal(results[i], []string{"001_init", "002_seed_dimensional_lumber"}):
 			appliedBy++
 		case len(results[i]) == 0:
 		default:
@@ -43,7 +43,51 @@ func TestMigrateAgainstPostgres(t *testing.T) {
 		}
 	}
 	if appliedBy != 1 {
-		t.Fatalf("%d concurrent runs applied 001_init, want 1", appliedBy)
+		t.Fatalf("%d concurrent runs applied 001_init then 002_seed_dimensional_lumber, want 1", appliedBy)
+	}
+
+	var system int
+	if err := pool.QueryRow(ctx, `
+		SELECT count(*) FROM materials
+		WHERE owner_id IS NULL
+		  AND species IS NULL
+		  AND grade IS NULL
+		  AND rough_thickness_in = actual_thickness_in + 0.25
+		  AND rough_width_in = actual_width_in
+	`).Scan(&system); err != nil {
+		t.Fatal(err)
+	}
+	if system != 17 {
+		t.Fatalf("system materials = %d, want 17", system)
+	}
+	var twoByFour string
+	if err := pool.QueryRow(ctx, `
+		SELECT id::text FROM materials WHERE owner_id IS NULL AND name = '2x4'
+	`).Scan(&twoByFour); err != nil {
+		t.Fatal(err)
+	}
+	again, err := db.Migrate(ctx, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(again) != 0 {
+		t.Fatalf("second migrate applied %v, want none", again)
+	}
+	var twoByFourAgain string
+	if err := pool.QueryRow(ctx, `
+		SELECT id::text FROM materials WHERE owner_id IS NULL AND name = '2x4'
+	`).Scan(&twoByFourAgain); err != nil {
+		t.Fatal(err)
+	}
+	if twoByFourAgain != twoByFour {
+		t.Fatalf("2x4 id = %s, want %s", twoByFourAgain, twoByFour)
+	}
+	var total int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM materials`).Scan(&total); err != nil {
+		t.Fatal(err)
+	}
+	if total != 17 {
+		t.Fatalf("materials = %d, want 17", total)
 	}
 
 	if err := db.CheckApplied(ctx, pool); err != nil {
