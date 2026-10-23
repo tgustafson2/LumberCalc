@@ -12,11 +12,7 @@ import (
 	"lumbercalc/backend/internal/store"
 )
 
-const maxDesignBody = 1 << 20
-
 const staleVersionMessage = "stale version"
-
-var errBadBody = errors.New("bad design body")
 
 type designEnvelope struct {
 	Name        json.RawMessage `json:"name"`
@@ -31,7 +27,7 @@ type replaceEnvelope struct {
 
 func (a *API) createDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	var env designEnvelope
-	if err := decodeDesignJSON(r.Body, &env); err != nil {
+	if err := decodeJSON(r.Body, &env); err != nil {
 		a.writeDesignErr(w, r, err)
 		return
 	}
@@ -87,7 +83,7 @@ func (a *API) replaceDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		return
 	}
 	var env replaceEnvelope
-	if err := decodeDesignJSON(r.Body, &env); err != nil {
+	if err := decodeJSON(r.Body, &env); err != nil {
 		a.writeDesignErr(w, r, err)
 		return
 	}
@@ -135,11 +131,11 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 }
 
 func rejectCopyBody(body io.Reader) error {
-	raw, err := io.ReadAll(io.LimitReader(body, maxDesignBody+1))
+	raw, err := io.ReadAll(io.LimitReader(body, maxBody+1))
 	if err != nil {
 		return err
 	}
-	if len(raw) > maxDesignBody || len(bytes.TrimSpace(raw)) != 0 {
+	if len(raw) > maxBody || len(bytes.TrimSpace(raw)) != 0 {
 		return errBadBody
 	}
 	return nil
@@ -156,22 +152,6 @@ func (a *API) deleteDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func decodeDesignJSON(body io.Reader, dest any) error {
-	raw, err := io.ReadAll(io.LimitReader(body, maxDesignBody+1))
-	if err != nil {
-		return err
-	}
-	if len(raw) > maxDesignBody {
-		return errBadBody
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dest); err != nil || dec.More() {
-		return errBadBody
-	}
-	return nil
 }
 
 func designFields(nameRaw, descriptionRaw, documentRaw json.RawMessage, documentRequired bool) (store.Name, string, store.Document, error) {

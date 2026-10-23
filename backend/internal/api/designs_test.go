@@ -155,7 +155,7 @@ func TestDesignRejectsABadBody(t *testing.T) {
 		{name: "version fraction", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":1.5,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
 		{name: "version string", method: http.MethodPut, path: "/v1/designs/" + designID, body: `{"name":"Bench","version":"1","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
 		{name: "create version", method: http.MethodPost, path: "/v1/designs", body: `{"name":"Bench","version":1}`},
-		{name: "body too large", method: http.MethodPost, path: "/v1/designs", body: `{"name":"` + strings.Repeat("a", maxDesignBody) + `"}`},
+		{name: "body too large", method: http.MethodPost, path: "/v1/designs", body: `{"name":"` + strings.Repeat("a", maxBody) + `"}`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

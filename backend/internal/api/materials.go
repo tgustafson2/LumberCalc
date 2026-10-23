@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -15,8 +14,6 @@ const (
 	nameTakenMessage     = "name already used"
 	materialInUseMessage = "material in use"
 )
-
-var errBadMaterialBody = errors.New("bad material body")
 
 func (a *API) createMaterial(w http.ResponseWriter, r *http.Request, c Caller) {
 	in, err := decodeMaterialInput(r.Body)
@@ -95,7 +92,7 @@ func materialStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, store.ErrNotOwner):
 		return http.StatusForbidden
-	case errors.Is(err, store.ErrBlankName), errors.Is(err, store.ErrBadInches), errors.Is(err, errBadMaterialBody):
+	case errors.Is(err, store.ErrBlankName), errors.Is(err, store.ErrBadInches), errors.Is(err, errBadBody):
 		return http.StatusBadRequest
 	case errors.Is(err, store.ErrNameTaken), errors.Is(err, store.ErrMaterialInUse):
 		return http.StatusConflict
@@ -122,18 +119,9 @@ func toMaterial(m store.Material) Material {
 }
 
 func decodeMaterialInput(body io.Reader) (store.MaterialInput, error) {
-	raw, err := io.ReadAll(io.LimitReader(body, maxDesignBody+1))
-	if err != nil {
-		return store.MaterialInput{}, err
-	}
-	if len(raw) > maxDesignBody {
-		return store.MaterialInput{}, errBadMaterialBody
-	}
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	dec.DisallowUnknownFields()
 	var env MaterialWrite
-	if err := dec.Decode(&env); err != nil || dec.More() {
-		return store.MaterialInput{}, errBadMaterialBody
+	if err := decodeJSON(body, &env); err != nil {
+		return store.MaterialInput{}, err
 	}
 	name, err := store.ParseName(env.Name)
 	if err != nil {
