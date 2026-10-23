@@ -121,6 +121,9 @@ var (
 	ErrNameTaken        = errors.New("material name is already used")
 	ErrMaterialInUse    = errors.New("material is in use")
 	ErrBadInches        = errors.New("material inches are not a positive number")
+	// ErrMaterialUnusable is a material id that GET /v1/materials does not return for the caller.
+	// A missing id and another user's id are the same error.
+	ErrMaterialUnusable = errors.New("material is not a system material or owned by the caller")
 )
 
 // ListMaterials returns system rows and the caller's rows.

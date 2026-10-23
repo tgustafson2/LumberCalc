@@ -56,11 +56,10 @@ type Price struct {
 }
 
 var (
-	ErrPriceNotFound    = errors.New("price not found")
-	ErrBadPriceID       = errors.New("price id is not a uuid")
-	ErrBadCents         = errors.New("price cents are not a non-negative integer")
-	ErrPriceTaken       = errors.New("price already exists for this material and length")
-	ErrMaterialUnusable = errors.New("material is not a system material or owned by the caller")
+	ErrPriceNotFound = errors.New("price not found")
+	ErrBadPriceID    = errors.New("price id is not a uuid")
+	ErrBadCents      = errors.New("price cents are not a non-negative integer")
+	ErrPriceTaken    = errors.New("price already exists for this material and length")
 )
 
 // ListPrices returns the caller's prices ordered by material, length, and id.

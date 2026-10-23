@@ -78,15 +78,15 @@ func (d *Document) UnmarshalJSON(raw []byte) error {
 func (d Document) schemaVersion() int32 { return 1 }
 
 // materialIDs returns each piece material id once, in first-seen order.
-func (d Document) materialIDs() []materialID {
-	ids := make([]materialID, 0, len(d.pieces))
+func (d Document) materialIDs() []MaterialID {
+	ids := make([]MaterialID, 0, len(d.pieces))
 	seen := make(map[string]struct{}, len(d.pieces))
 	for _, p := range d.pieces {
 		if _, ok := seen[p.materialID]; ok {
 			continue
 		}
 		seen[p.materialID] = struct{}{}
-		var id materialID
+		var id MaterialID
 		// parsePiece already accepted this uuid. A failure here is a broken document.
 		if err := decodeUUID(p.materialID, &id.v); err != nil {
 			panic(err)
@@ -150,8 +150,6 @@ func newV4() (string, error) {
 	b[8] = (b[8] & 0x3f) | 0x80
 	return formatUUID(b), nil
 }
-
-type materialID struct{ v [16]byte }
 
 func (d Document) MarshalJSON() ([]byte, error) {
 	body := wireDocument{

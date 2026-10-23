@@ -9,7 +9,7 @@ INSERT INTO prices (owner_id, material_id, length_in, price_cents)
 SELECT sqlc.arg('owner_id')::uuid, m.id, sqlc.arg('length_in')::numeric, sqlc.arg('price_cents')::integer
 FROM materials m
 WHERE m.id = sqlc.arg('material_id')
-  AND (m.owner_id IS NULL OR m.owner_id = sqlc.arg('owner_id')::uuid)
+  AND material_usable(m.owner_id, sqlc.arg('owner_id')::uuid)
 RETURNING *;
 
 -- name: UpdateOwnedPriceCents :one

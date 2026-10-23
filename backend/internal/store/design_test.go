@@ -318,7 +318,7 @@ func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 		Document: testDocument(t, "99999999-9999-4999-8999-999999999999"),
 		Base:     created.Version,
 	})
-	if !errors.Is(err, store.ErrMaterialMissing) {
+	if !errors.Is(err, store.ErrMaterialUnusable) {
 		t.Fatalf("err = %v", err)
 	}
 	got, err := s.Get(ctx, owner, created.ID)
@@ -337,7 +337,7 @@ func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 		Name:     name,
 		Document: testDocument(t, "99999999-9999-4999-8999-999999999999"),
 	})
-	if !errors.Is(err, store.ErrMaterialMissing) {
+	if !errors.Is(err, store.ErrMaterialUnusable) {
 		t.Fatalf("create err = %v", err)
 	}
 	var n int
@@ -346,6 +346,100 @@ func TestSaveUnknownMaterialRollsBack(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("design rows = %d, want 1", n)
+	}
+}
+
+func TestSaveHiddenMaterialRollsBack(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	other := testUser(t, s, "user_other")
+	pine := insertMaterial(t, pool, owner, "pine")
+	oak := insertMaterial(t, pool, other, "oak")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: testDocument(t, oak),
+		Base:     created.Version,
+	})
+	if !errors.Is(err, store.ErrMaterialUnusable) {
+		t.Fatalf("replace err = %v", err)
+	}
+	got, err := s.Get(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 1 {
+		t.Fatalf("version = %d, want 1", got.Version)
+	}
+	if usages := usageMaterialIDs(t, pool, created.ID); len(usages) != 1 || usages[0] != pine {
+		t.Fatalf("usages = %v, want [%s]", usages, pine)
+	}
+
+	_, err = s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, oak),
+	})
+	if !errors.Is(err, store.ErrMaterialUnusable) {
+		t.Fatalf("create err = %v", err)
+	}
+
+	tag, err := pool.Exec(ctx, `
+		UPDATE designs
+		SET document = jsonb_set(document, '{pieces,0,materialId}', to_jsonb($2::text))
+		WHERE id = $1
+	`, created.ID.String(), oak)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("updated = %d", tag.RowsAffected())
+	}
+	hidden, err := s.Get(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertDocument(t, hidden.Document, testDocument(t, oak))
+	_, err = s.Copy(ctx, owner, created.ID)
+	if !errors.Is(err, store.ErrMaterialUnusable) {
+		t.Fatalf("copy err = %v", err)
+	}
+	var n int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM designs WHERE owner_id = $1`, owner.String()).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("design rows = %d, want 1", n)
+	}
+
+	var system string
+	if err := pool.QueryRow(ctx, `SELECT id::text FROM materials WHERE owner_id IS NULL AND name = '2x4'`).Scan(&system); err != nil {
+		t.Fatal(err)
+	}
+	replaced, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: testDocument(t, system),
+		Base:     created.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if usages := usageMaterialIDs(t, pool, replaced.ID); len(usages) != 1 || usages[0] != system {
+		t.Fatalf("usages = %v, want [%s]", usages, system)
 	}
 }
 
@@ -603,7 +697,7 @@ func TestCopyMissingMaterialLeavesNoRow(t *testing.T) {
 		t.Fatalf("updated rows = %d", tag.RowsAffected())
 	}
 	_, err = s.Copy(ctx, owner, source.ID)
-	if !errors.Is(err, store.ErrMaterialMissing) {
+	if !errors.Is(err, store.ErrMaterialUnusable) {
 		t.Fatalf("err = %v", err)
 	}
 	var n int

@@ -124,8 +124,7 @@ func (q *Queries) InsertMaterial(ctx context.Context, arg InsertMaterialParams) 
 const listVisibleMaterials = `-- name: ListVisibleMaterials :many
 SELECT id, owner_id, name, species, grade, nominal_thickness_in, nominal_width_in, actual_thickness_in, actual_width_in, rough_thickness_in, rough_width_in, created_at, updated_at
 FROM materials
-WHERE owner_id IS NULL
-   OR owner_id = $1
+WHERE material_usable(owner_id, $1::uuid)
 ORDER BY name, id
 `
 

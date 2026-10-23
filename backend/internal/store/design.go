@@ -79,11 +79,10 @@ func (CreateDraft) draftKind()  {}
 func (ReplaceDraft) draftKind() {}
 
 var (
-	ErrNotFound        = errors.New("design not found")
-	ErrBadDesignID     = errors.New("design id is not a uuid")
-	ErrBlankName       = errors.New("design name is blank")
-	ErrMaterialMissing = errors.New("design material is missing")
-	ErrStale           = errors.New("stale version")
+	ErrNotFound    = errors.New("design not found")
+	ErrBadDesignID = errors.New("design id is not a uuid")
+	ErrBlankName   = errors.New("design name is blank")
+	ErrStale       = errors.New("stale version")
 )
 
 func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, error) {
@@ -144,7 +143,7 @@ func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, er
 		if err := qtx.DeleteDesignUsages(ctx, row.ID); err != nil {
 			return err
 		}
-		return insertUsages(ctx, qtx, row.ID, doc.materialIDs())
+		return insertUsages(ctx, qtx, owner, row.ID, doc.materialIDs())
 	})
 	if err != nil {
 		return Design{}, err
@@ -242,7 +241,7 @@ func (s *Store) Copy(ctx context.Context, owner UserID, id DesignID) (Design, er
 		if err != nil {
 			return err
 		}
-		return insertUsages(ctx, qtx, row.ID, cloned.materialIDs())
+		return insertUsages(ctx, qtx, owner, row.ID, cloned.materialIDs())
 	})
 	if err != nil {
 		return Design{}, err
@@ -255,14 +254,18 @@ func copyName(source Name) Name {
 	return Name{s: source.s + " copy"}
 }
 
-func insertUsages(ctx context.Context, qtx *q.Queries, designID pgtype.UUID, ids []materialID) error {
+func insertUsages(ctx context.Context, qtx *q.Queries, owner UserID, designID pgtype.UUID, ids []MaterialID) error {
 	for _, id := range ids {
-		err := qtx.InsertDesignUsage(ctx, q.InsertDesignUsageParams{
+		n, err := qtx.InsertDesignUsageForUsableMaterial(ctx, q.InsertDesignUsageForUsableMaterialParams{
 			DesignID:   designID,
 			MaterialID: uuidPG(id.v),
+			OwnerID:    uuidPG(owner.v),
 		})
 		if err != nil {
 			return usageErr(err)
+		}
+		if n == 0 {
+			return fmt.Errorf("%w: %s", ErrMaterialUnusable, id)
 		}
 	}
 	return nil
@@ -300,8 +303,10 @@ func summaryFromRow(id pgtype.UUID, name, description string, version int32, upd
 
 func usageErr(err error) error {
 	var pgErr *pgconn.PgError
+	// A delete that commits after this statement reads the material still fails the foreign key.
+	// That race is the same error as a missing id.
 	if errors.As(err, &pgErr) && pgErr.Code == "23503" && pgErr.ConstraintName == "design_material_usages_material_id_fkey" {
-		return ErrMaterialMissing
+		return ErrMaterialUnusable
 	}
 	return err
 }

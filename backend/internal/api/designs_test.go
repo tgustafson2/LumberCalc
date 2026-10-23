@@ -186,16 +186,31 @@ func TestReplaceStaleVersionReturns409(t *testing.T) {
 	}
 }
 
-func TestDesignUnknownMaterialReturns409(t *testing.T) {
-	h := designHandler(t, func(context.Context, store.UserID, store.Draft) (store.Design, error) {
-		return store.Design{}, store.ErrMaterialMissing
-	}, nil, nil, nil, nil)
-	rr := callJSON(h, http.MethodPost, "/v1/designs", `{"name":"Bench"}`)
-	if rr.Code != http.StatusConflict {
-		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+func TestDesignUnusableMaterialReturns409(t *testing.T) {
+	save := func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+		return store.Design{}, store.ErrMaterialUnusable
 	}
-	if strings.TrimSpace(rr.Body.String()) != `{"error":"conflict"}` {
-		t.Fatalf("body = %s", rr.Body.String())
+	copyDesign := func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+		return store.Design{}, store.ErrMaterialUnusable
+	}
+	h := designHandler(t, save, nil, nil, nil, copyDesign)
+	calls := []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{http.MethodPost, "/v1/designs", `{"name":"Bench"}`},
+		{http.MethodPut, "/v1/designs/" + designID, `{"name":"Bench","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`},
+		{http.MethodPost, "/v1/designs/" + designID + "/copy", ""},
+	}
+	for _, call := range calls {
+		rr := callJSON(h, call.method, call.path, call.body)
+		if rr.Code != http.StatusConflict {
+			t.Fatalf("%s %s status = %d, body = %s", call.method, call.path, rr.Code, rr.Body.String())
+		}
+		if strings.TrimSpace(rr.Body.String()) != `{"error":"material not available"}` {
+			t.Fatalf("%s %s body = %s", call.method, call.path, rr.Body.String())
+		}
 	}
 }
 

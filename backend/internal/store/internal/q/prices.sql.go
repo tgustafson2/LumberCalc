@@ -35,7 +35,7 @@ INSERT INTO prices (owner_id, material_id, length_in, price_cents)
 SELECT $1::uuid, m.id, $2::numeric, $3::integer
 FROM materials m
 WHERE m.id = $4
-  AND (m.owner_id IS NULL OR m.owner_id = $1::uuid)
+  AND material_usable(m.owner_id, $1::uuid)
 RETURNING id, owner_id, material_id, length_in, price_cents, created_at, updated_at
 `
 

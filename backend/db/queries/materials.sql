@@ -1,8 +1,7 @@
 -- name: ListVisibleMaterials :many
 SELECT *
 FROM materials
-WHERE owner_id IS NULL
-   OR owner_id = sqlc.arg('owner_id')
+WHERE material_usable(owner_id, sqlc.arg('owner_id')::uuid)
 ORDER BY name, id;
 
 -- name: InsertMaterial :one
