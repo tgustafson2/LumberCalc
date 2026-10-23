@@ -12,6 +12,9 @@ import {
 import { createV1Client } from "./api";
 import { DesignDetailPage } from "./designs/detail-page";
 import { DesignsListPage } from "./designs/list-page";
+import { loadCatalog, runCatalogCommand } from "./catalog/model";
+import { MaterialsPage } from "./catalog/materials-page";
+import { PricesPage } from "./catalog/prices-page";
 import { designActions, loadDesignDetail, loadDesignList } from "./designs/model";
 import { redirectFor, type SessionGate } from "./gate";
 
@@ -91,9 +94,23 @@ const designDetailRoute = createRoute({
   component: DesignDetailRoute,
 });
 
+const materialsRoute = createRoute({
+  getParentRoute: () => signedInBranch,
+  path: "/materials",
+  loader: ({ context, abortController }) => loadCatalog(context.api, abortController.signal),
+  component: MaterialsRoute,
+});
+
+const pricesRoute = createRoute({
+  getParentRoute: () => signedInBranch,
+  path: "/prices",
+  loader: ({ context, abortController }) => loadCatalog(context.api, abortController.signal),
+  component: PricesRoute,
+});
+
 const routeTree = rootRoute.addChildren([
   signedOutBranch.addChildren([signInRoute]),
-  signedInBranch.addChildren([designsRoute, designDetailRoute]),
+  signedInBranch.addChildren([designsRoute, designDetailRoute, materialsRoute, pricesRoute]),
 ]);
 
 function buildRouter(gate: ResolvedGate) {
@@ -141,6 +158,18 @@ function DesignDetailRoute() {
   const model = designDetailRoute.useLoaderData();
   const { api } = designDetailRoute.useRouteContext();
   return <DesignDetailPage model={model} rename={designActions(api).rename} />;
+}
+
+function MaterialsRoute() {
+  const model = materialsRoute.useLoaderData();
+  const { api } = materialsRoute.useRouteContext();
+  return <MaterialsPage model={model} run={(command) => runCatalogCommand(api, command)} />;
+}
+
+function PricesRoute() {
+  const model = pricesRoute.useLoaderData();
+  const { api } = pricesRoute.useRouteContext();
+  return <PricesPage model={model} run={(command) => runCatalogCommand(api, command)} />;
 }
 
 function NotFound() {

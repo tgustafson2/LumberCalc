@@ -1,9 +1,9 @@
 import { useRef, useState, type FormEvent } from "react";
-import { SignOutButton } from "@clerk/clerk-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { DesignId, V1Failure } from "../api";
 import { FailedResult } from "../failed-result";
 import { beginAction, mutationView, settle } from "../mutation";
+import { SignedInHeader } from "../signed-in-header";
 import {
   formatUpdatedAt,
   nextListActivity,
@@ -121,8 +121,7 @@ export function DesignsListPage(props: {
 
   return (
     <main>
-      <h1>Designs for {props.model.displayName}</h1>
-      <SignOutButton />
+      <SignedInHeader title={`Designs for ${props.model.displayName}`} />
       <form onSubmit={onCreate}>
         <label>
           Name

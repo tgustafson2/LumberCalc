@@ -1,9 +1,9 @@
 import { useRef, useState, type FormEvent } from "react";
-import { SignOutButton } from "@clerk/clerk-react";
 import { Link, useRouter } from "@tanstack/react-router";
 import type { V1Failure } from "../api";
 import { FailedResult } from "../failed-result";
 import { beginAction, mutationView, settle } from "../mutation";
+import { SignedInHeader } from "../signed-in-header";
 import {
   designSummaryText,
   nextDetailActivity,
@@ -61,7 +61,7 @@ export function DesignDetailPage(props: {
   if (props.model.kind === "absent") {
     return (
       <main>
-        <h1>Design not found</h1>
+        <SignedInHeader title="Design not found" />
         <Link to="/designs">All designs</Link>
       </main>
     );
@@ -114,8 +114,7 @@ export function DesignDetailPage(props: {
 
   return (
     <main>
-      <h1>{design.name}</h1>
-      <SignOutButton />
+      <SignedInHeader title={design.name} />
       <p>{designSummaryText(design)}</p>
       {design.description.length > 0 ? <p>{design.description}</p> : null}
       <form onSubmit={onSave}>
