@@ -90,6 +90,9 @@ WHERE id = sqlc.arg('id')
 DELETE FROM design_material_usages
 WHERE design_id = sqlc.arg('design_id');
 
--- name: InsertDesignUsage :exec
+-- name: InsertDesignUsageForUsableMaterial :execrows
 INSERT INTO design_material_usages (design_id, material_id)
-VALUES (sqlc.arg('design_id'), sqlc.arg('material_id'));
+SELECT sqlc.arg('design_id')::uuid, m.id
+FROM materials m
+WHERE m.id = sqlc.arg('material_id')::uuid
+  AND material_usable(m.owner_id, sqlc.arg('owner_id')::uuid);

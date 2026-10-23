@@ -232,11 +232,14 @@ func integerToken(token []byte) bool {
 
 func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) {
 	a.d.Log.ErrorContext(r.Context(), "design", "err", err)
-	if errors.Is(err, store.ErrStale) {
+	switch {
+	case errors.Is(err, store.ErrStale):
 		server.WriteJSON(w, http.StatusConflict, server.Error{Error: staleVersionMessage})
-		return
+	case errors.Is(err, store.ErrMaterialUnusable):
+		server.WriteJSON(w, http.StatusConflict, server.Error{Error: materialUnavailableMessage})
+	default:
+		server.WriteError(w, designStatus(err))
 	}
-	server.WriteError(w, designStatus(err))
 }
 
 func designStatus(err error) int {
@@ -246,7 +249,7 @@ func designStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, store.ErrBlankName), errors.Is(err, errBadBody), errors.As(err, &docErr):
 		return http.StatusBadRequest
-	case errors.Is(err, store.ErrStale), errors.Is(err, store.ErrMaterialMissing):
+	case errors.Is(err, store.ErrStale), errors.Is(err, store.ErrMaterialUnusable):
 		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError

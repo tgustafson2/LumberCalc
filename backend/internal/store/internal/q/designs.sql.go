@@ -161,19 +161,26 @@ func (q *Queries) InsertDesign(ctx context.Context, arg InsertDesignParams) (Des
 	return i, err
 }
 
-const insertDesignUsage = `-- name: InsertDesignUsage :exec
+const insertDesignUsageForUsableMaterial = `-- name: InsertDesignUsageForUsableMaterial :execrows
 INSERT INTO design_material_usages (design_id, material_id)
-VALUES ($1, $2)
+SELECT $1::uuid, m.id
+FROM materials m
+WHERE m.id = $2::uuid
+  AND material_usable(m.owner_id, $3::uuid)
 `
 
-type InsertDesignUsageParams struct {
+type InsertDesignUsageForUsableMaterialParams struct {
 	DesignID   pgtype.UUID
 	MaterialID pgtype.UUID
+	OwnerID    pgtype.UUID
 }
 
-func (q *Queries) InsertDesignUsage(ctx context.Context, arg InsertDesignUsageParams) error {
-	_, err := q.db.Exec(ctx, insertDesignUsage, arg.DesignID, arg.MaterialID)
-	return err
+func (q *Queries) InsertDesignUsageForUsableMaterial(ctx context.Context, arg InsertDesignUsageForUsableMaterialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDesignUsageForUsableMaterial, arg.DesignID, arg.MaterialID, arg.OwnerID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const listLiveDesigns = `-- name: ListLiveDesigns :many

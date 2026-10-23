@@ -119,7 +119,7 @@ var exchanges = map[string][]exchange{
 			status:       http.StatusConflict,
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
 			save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
-				return store.Design{}, store.ErrMaterialMissing
+				return store.Design{}, store.ErrMaterialUnusable
 			},
 		},
 	},

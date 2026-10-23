@@ -35,7 +35,7 @@ func TestMigrateAgainstPostgres(t *testing.T) {
 			t.Fatalf("run %d: %v", i, errs[i])
 		}
 		switch {
-		case slices.Equal(results[i], []string{"001_init", "002_seed_dimensional_lumber"}):
+		case slices.Equal(results[i], []string{"001_init", "002_seed_dimensional_lumber", "003_material_usable"}):
 			appliedBy++
 		case len(results[i]) == 0:
 		default:
@@ -43,7 +43,7 @@ func TestMigrateAgainstPostgres(t *testing.T) {
 		}
 	}
 	if appliedBy != 1 {
-		t.Fatalf("%d concurrent runs applied 001_init then 002_seed_dimensional_lumber, want 1", appliedBy)
+		t.Fatalf("%d concurrent runs applied the embedded migrations, want 1", appliedBy)
 	}
 
 	var system int

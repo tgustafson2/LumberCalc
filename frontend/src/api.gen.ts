@@ -533,7 +533,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The document names a material that does not exist. */
+            /** @description The document names a material the caller cannot use. The error is material not available. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -655,7 +655,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description A version that does not match sets error to stale version and leaves the row unchanged. A missing material sets error to conflict. */
+            /** @description A version that does not match sets error to stale version and leaves the row unchanged. A material the caller cannot use sets error to material not available. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -772,7 +772,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The document names a material that does not exist. */
+            /** @description The document names a material the caller cannot use. The error is material not available. */
             409: {
                 headers: {
                     [name: string]: unknown;

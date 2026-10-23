@@ -84,6 +84,23 @@ type Material struct {
 	UpdatedAt          time.Time
 }
 
+// CrossSection is the physical thickness and width for one cut.
+// It is taken from a material row at read time and is never stored on a piece.
+type CrossSection struct {
+	ThicknessIn Inches
+	WidthIn     Inches
+}
+
+// CrossSection selects the dressed actual sizes when roughCut is false.
+// It selects the rough sizes when roughCut is true.
+// Nominal sizes and piece length are not inputs.
+func (m Material) CrossSection(roughCut bool) CrossSection {
+	if roughCut {
+		return CrossSection{ThicknessIn: m.RoughThicknessIn, WidthIn: m.RoughWidthIn}
+	}
+	return CrossSection{ThicknessIn: m.ActualThicknessIn, WidthIn: m.ActualWidthIn}
+}
+
 // MaterialInput is one create or full replace. Species and grade store SQL null when blank.
 type MaterialInput struct {
 	Name               Name
@@ -104,6 +121,9 @@ var (
 	ErrNameTaken        = errors.New("material name is already used")
 	ErrMaterialInUse    = errors.New("material is in use")
 	ErrBadInches        = errors.New("material inches are not a positive number")
+	// ErrMaterialUnusable is a material id that GET /v1/materials does not return for the caller.
+	// A missing id and another user's id are the same error.
+	ErrMaterialUnusable = errors.New("material is not a system material or owned by the caller")
 )
 
 // ListMaterials returns system rows and the caller's rows.
