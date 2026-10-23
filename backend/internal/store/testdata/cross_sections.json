@@ -1,0 +1,45 @@
+[
+  {
+    "name": "dressed 2x4",
+    "material": {
+      "actualThicknessIn": 1.5,
+      "actualWidthIn": 3.5,
+      "roughThicknessIn": 1.75,
+      "roughWidthIn": 3.5
+    },
+    "roughCut": false,
+    "want": { "thicknessIn": 1.5, "widthIn": 3.5 }
+  },
+  {
+    "name": "rough 2x4",
+    "material": {
+      "actualThicknessIn": 1.5,
+      "actualWidthIn": 3.5,
+      "roughThicknessIn": 1.75,
+      "roughWidthIn": 3.5
+    },
+    "roughCut": true,
+    "want": { "thicknessIn": 1.75, "widthIn": 3.5 }
+  },
+  {
+    "name": "missing roughCut is dressed",
+    "material": {
+      "actualThicknessIn": 1.5,
+      "actualWidthIn": 3.5,
+      "roughThicknessIn": 1.75,
+      "roughWidthIn": 3.5
+    },
+    "want": { "thicknessIn": 1.5, "widthIn": 3.5 }
+  },
+  {
+    "name": "rough width comes from rough, not actual",
+    "material": {
+      "actualThicknessIn": 0.75,
+      "actualWidthIn": 5.5,
+      "roughThicknessIn": 1,
+      "roughWidthIn": 6
+    },
+    "roughCut": true,
+    "want": { "thicknessIn": 1, "widthIn": 6 }
+  }
+]
