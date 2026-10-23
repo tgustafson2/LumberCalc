@@ -1,17 +1,15 @@
 import { useRef, useState, type FormEvent } from "react";
 import { SignOutButton } from "@clerk/clerk-react";
 import { Link, useRouter } from "@tanstack/react-router";
+import type { V1Failure } from "../api";
 import { FailedResult } from "../failed-result";
+import { beginAction, mutationView, settle } from "../mutation";
 import {
-  beginAction,
   designSummaryText,
-  mutationView,
   nextDetailActivity,
-  settle,
   type DesignActions,
   type DesignDetailModel,
   type DetailActivity,
-  type V1Failure,
 } from "./model";
 
 export function DesignDetailPage(props: {

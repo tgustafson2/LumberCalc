@@ -1,5 +1,5 @@
 import { SignOutButton } from "@clerk/clerk-react";
-import type { V1Failure } from "./designs/model";
+import type { V1Failure } from "./api";
 
 export function FailedResult(props: {
   readonly result: V1Failure;

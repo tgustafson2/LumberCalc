@@ -1,6 +1,4 @@
-import type { Design, DesignId, DesignSummary, V1Client, V1Result } from "../api";
-
-export type V1Failure = Exclude<V1Result<unknown>, { readonly kind: "ok" }>;
+import type { Design, DesignId, DesignSummary, V1Client, V1Failure } from "../api";
 
 export type DesignsListModel =
   | {
@@ -38,8 +36,6 @@ export type DesignActions = {
   readonly delete: (id: DesignId, signal?: AbortSignal) => Promise<DeleteDesignResult>;
   readonly rename: (design: Design, rawName: string, signal?: AbortSignal) => Promise<RenameDesignResult>;
 };
-
-export type ActionGate = { current: "open" | "busy" | "held" };
 
 export type ListActivity =
   | { readonly kind: "idle" }
@@ -224,65 +220,6 @@ export function formatUpdatedAt(updatedAt: string): string {
 
 export function designSummaryText(design: Design): string {
   return `Version ${design.version}. Updated ${formatUpdatedAt(design.updatedAt)}. Piece count ${design.document.pieces.length}. Connection count ${design.document.connections.length}.`;
-}
-
-export function beginAction(
-  gate: ActionGate,
-  work: () => Promise<"hold" | "done">,
-): Promise<void> | null {
-  if (gate.current !== "open") {
-    return null;
-  }
-  gate.current = "busy";
-  let pending: Promise<"hold" | "done">;
-  try {
-    pending = work();
-  } catch (error) {
-    gate.current = "open";
-    throw error;
-  }
-  return pending.then(
-    (result) => {
-      gate.current = result === "hold" ? "held" : "open";
-    },
-    (error: unknown) => {
-      gate.current = "open";
-      throw error;
-    },
-  );
-}
-
-export function mutationView(
-  result: V1Failure,
-):
-  | { readonly kind: "session"; readonly failure: V1Failure }
-  | { readonly kind: "notice"; readonly message: string } {
-  switch (result.kind) {
-    case "no-token":
-    case "unauthorized":
-      return { kind: "session", failure: result };
-    case "unreachable":
-      return { kind: "notice", message: "The API is not reachable." };
-    case "invalid":
-      return { kind: "notice", message: "The API sent an unexpected response." };
-    case "failed":
-      return { kind: "notice", message: result.message };
-    default: {
-      const _exhaustive: never = result;
-      return _exhaustive;
-    }
-  }
-}
-
-export async function settle<T>(work: Promise<T>): Promise<T | { readonly kind: "aborted" }> {
-  try {
-    return await work;
-  } catch (error: unknown) {
-    if (error instanceof Error && error.name === "AbortError") {
-      return { kind: "aborted" };
-    }
-    throw error;
-  }
 }
 
 function trimmedName(rawName: string): string | null {

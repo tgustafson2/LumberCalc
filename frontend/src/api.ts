@@ -2,7 +2,7 @@ import createClient from "openapi-fetch";
 import type { components, paths } from "./api.gen";
 
 declare const brand: unique symbol;
-type Brand<T, B extends string> = T & { readonly [brand]: B };
+export type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 export type UserId = Brand<string, "UserId">;
 
@@ -82,6 +82,8 @@ export type V1Result<T> =
   | { readonly kind: "unreachable" }
   | { readonly kind: "invalid" }
   | { readonly kind: "failed"; readonly status: number; readonly message: string };
+
+export type V1Failure = Exclude<V1Result<unknown>, { readonly kind: "ok" }>;
 
 export type MeResult = V1Result<Me>;
 
