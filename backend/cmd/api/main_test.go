@@ -55,6 +55,18 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		DeleteMaterial: func(context.Context, store.UserID, store.MaterialID) error {
 			return store.ErrMaterialNotFound
 		},
+		CreatePrice: func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error) {
+			return store.Price{}, store.ErrPriceNotFound
+		},
+		ListPrices: func(context.Context, store.UserID) ([]store.Price, error) {
+			return nil, store.ErrPriceNotFound
+		},
+		UpdatePrice: func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error) {
+			return store.Price{}, store.ErrPriceNotFound
+		},
+		DeletePrice: func(context.Context, store.UserID, store.PriceID) error {
+			return store.ErrPriceNotFound
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

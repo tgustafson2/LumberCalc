@@ -219,6 +219,10 @@ func materialHandler(
 		ListMaterials:  list,
 		UpdateMaterial: update,
 		DeleteMaterial: del,
+		CreatePrice:    idleCreatePrice,
+		ListPrices:     idleListPrices,
+		UpdatePrice:    idleUpdatePrice,
+		DeletePrice:    idleDeletePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

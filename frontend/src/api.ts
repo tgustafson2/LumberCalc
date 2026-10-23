@@ -12,6 +12,8 @@ export type DesignId = Brand<string, "DesignId">;
 
 export type MaterialId = Brand<string, "MaterialId">;
 
+export type PriceId = Brand<string, "PriceId">;
+
 export type Me = {
   readonly userId: UserId;
   readonly clerkUserId: ClerkUserId;
@@ -59,6 +61,20 @@ export type Material = {
   readonly updatedAt: string;
 };
 
+export type PriceCreate = {
+  readonly materialId: MaterialId;
+  readonly lengthIn: number;
+  readonly priceCents: number;
+};
+
+export type Price = {
+  readonly id: PriceId;
+  readonly materialId: MaterialId;
+  readonly lengthIn: number;
+  readonly priceCents: number;
+  readonly updatedAt: string;
+};
+
 export type V1Result<T> =
   | { readonly kind: "ok"; readonly value: T }
   | { readonly kind: "no-token" }
@@ -94,6 +110,14 @@ export type V1Client = {
     options?: RequestOptions,
   ) => Promise<V1Result<Material>>;
   readonly deleteMaterial: (id: MaterialId, options?: RequestOptions) => Promise<V1Result<null>>;
+  readonly createPrice: (body: PriceCreate, options?: RequestOptions) => Promise<V1Result<Price>>;
+  readonly listPrices: (options?: RequestOptions) => Promise<V1Result<readonly Price[]>>;
+  readonly updatePrice: (
+    id: PriceId,
+    body: { readonly priceCents: number },
+    options?: RequestOptions,
+  ) => Promise<V1Result<Price>>;
+  readonly deletePrice: (id: PriceId, options?: RequestOptions) => Promise<V1Result<null>>;
 };
 
 type TokenSource = () => Promise<string | null>;
@@ -178,6 +202,30 @@ export function createV1Client(options: {
         options.getToken,
         (headers) =>
           http.DELETE("/v1/materials/{id}", { params: { path: { id } }, signal, headers }),
+        () => ({ kind: "invalid" }),
+      ),
+    createPrice: (body, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.POST("/v1/prices", { body, signal, headers }),
+        toPrice,
+      ),
+    listPrices: ({ signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.GET("/v1/prices", { signal, headers }),
+        toPriceList,
+      ),
+    updatePrice: (id, body, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.PUT("/v1/prices/{id}", { params: { path: { id } }, body, signal, headers }),
+        toPrice,
+      ),
+    deletePrice: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.DELETE("/v1/prices/{id}", { params: { path: { id } }, signal, headers }),
         () => ({ kind: "invalid" }),
       ),
   };
@@ -306,6 +354,47 @@ function toMaterial(wire: Wire["Material"]): Parsed<Material> {
       updatedAt,
     },
   };
+}
+
+function toPrice(wire: Wire["Price"]): Parsed<Price> {
+  const id = text(wire.id);
+  const materialId = text(wire.materialId);
+  const updatedAt = text(wire.updatedAt);
+  if (
+    id === null ||
+    materialId === null ||
+    updatedAt === null ||
+    !positiveNumber(wire.lengthIn) ||
+    !nonNegativeInteger(wire.priceCents)
+  ) {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "ok",
+    value: {
+      id: id as PriceId,
+      materialId: materialId as MaterialId,
+      lengthIn: wire.lengthIn,
+      priceCents: wire.priceCents,
+      updatedAt,
+    },
+  };
+}
+
+function toPriceList(wire: readonly Wire["Price"][]): Parsed<readonly Price[]> {
+  const values: Price[] = [];
+  for (const item of wire) {
+    const price = toPrice(item);
+    if (price.kind !== "ok") {
+      return price;
+    }
+    values.push(price.value);
+  }
+  return { kind: "ok", value: values };
+}
+
+function nonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 function toMaterialList(wire: readonly Wire["Material"][]): Parsed<readonly Material[]> {

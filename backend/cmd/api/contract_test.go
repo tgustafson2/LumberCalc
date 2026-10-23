@@ -43,6 +43,10 @@ type exchange struct {
 	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
 	deleteMaterial func(context.Context, store.UserID, store.MaterialID) error
+	createPrice    func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
+	listPrices     func(context.Context, store.UserID) ([]store.Price, error)
+	updatePrice    func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
+	deletePrice    func(context.Context, store.UserID, store.PriceID) error
 }
 
 var exchanges = map[string][]exchange{
@@ -220,6 +224,46 @@ var exchanges = map[string][]exchange{
 			return nil
 		},
 	}},
+	"createPrice": {{
+		name:         "created",
+		body:         priceBody,
+		validRequest: true,
+		status:       http.StatusCreated,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		createPrice: func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error) {
+			return samplePrice(), nil
+		},
+	}},
+	"listPrices": {{
+		name:         "one price",
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		listPrices: func(context.Context, store.UserID) ([]store.Price, error) {
+			return []store.Price{samplePrice()}, nil
+		},
+	}},
+	"updatePrice": {{
+		name:         "updated",
+		path:         "/v1/prices/00000000-0000-4000-8000-000000000001",
+		body:         `{"priceCents":599}`,
+		validRequest: true,
+		status:       http.StatusOK,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		updatePrice: func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error) {
+			return samplePrice(), nil
+		},
+	}},
+	"deletePrice": {{
+		name:         "deleted",
+		path:         "/v1/prices/00000000-0000-4000-8000-000000000001",
+		validRequest: true,
+		status:       http.StatusNoContent,
+		auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		deletePrice: func(context.Context, store.UserID, store.PriceID) error {
+			return nil
+		},
+	}},
 }
 
 func sampleDesign(version int32) store.Design {
@@ -253,6 +297,8 @@ func (e probeError) Error() string { return string(e) }
 
 const materialBody = `{"name":"Pine","nominalThicknessIn":2,"nominalWidthIn":4,"actualThicknessIn":1.5,"actualWidthIn":3.5,"roughThicknessIn":1.75,"roughWidthIn":3.5}`
 
+const priceBody = `{"materialId":"00000000-0000-4000-8000-000000000002","lengthIn":96,"priceCents":548}`
+
 func sampleMaterial() store.Material {
 	name, err := store.ParseName("Pine")
 	if err != nil {
@@ -279,6 +325,31 @@ func sampleMaterial() store.Material {
 		RoughThicknessIn:   inches("1.75"),
 		RoughWidthIn:       inches("3.5"),
 		UpdatedAt:          time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+	}
+}
+
+func samplePrice() store.Price {
+	id, err := store.ParsePriceID("00000000-0000-4000-8000-000000000001")
+	if err != nil {
+		panic(err)
+	}
+	material, err := store.ParseMaterialID("00000000-0000-4000-8000-000000000002")
+	if err != nil {
+		panic(err)
+	}
+	length, err := store.ParseInches("96")
+	if err != nil {
+		panic(err)
+	}
+	cents, err := store.ParseCents("548")
+	if err != nil {
+		panic(err)
+	}
+	return store.Price{
+		ID:        id,
+		Key:       store.PriceKey{Material: material, Length: length},
+		Cents:     cents,
+		UpdatedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 	}
 }
 
@@ -515,6 +586,30 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.ErrMaterialNotFound
 		}
 	}
+	createPrice := c.createPrice
+	if createPrice == nil {
+		createPrice = func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error) {
+			return store.Price{}, store.ErrPriceNotFound
+		}
+	}
+	listPrices := c.listPrices
+	if listPrices == nil {
+		listPrices = func(context.Context, store.UserID) ([]store.Price, error) {
+			return []store.Price{}, nil
+		}
+	}
+	updatePrice := c.updatePrice
+	if updatePrice == nil {
+		updatePrice = func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error) {
+			return store.Price{}, store.ErrPriceNotFound
+		}
+	}
+	deletePrice := c.deletePrice
+	if deletePrice == nil {
+		deletePrice = func(context.Context, store.UserID, store.PriceID) error {
+			return store.ErrPriceNotFound
+		}
+	}
 	checks := c.checks
 	if len(checks) == 0 {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
@@ -533,6 +628,10 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		ListMaterials:  listMaterials,
 		UpdateMaterial: updateMaterial,
 		DeleteMaterial: deleteMaterial,
+		CreatePrice:    createPrice,
+		ListPrices:     listPrices,
+		UpdatePrice:    updatePrice,
+		DeletePrice:    deletePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

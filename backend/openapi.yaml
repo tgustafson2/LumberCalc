@@ -537,6 +537,167 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/prices:
+    post:
+      operationId: createPrice
+      tags: [v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceCreate"
+      responses:
+        "201":
+          description: The price was created.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Price"
+        "400":
+          description: The body, the material id, the length, or the cents are not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The error is price already exists or material not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The price was not saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    get:
+      operationId: listPrices
+      tags: [v1]
+      responses:
+        "200":
+          description: The caller's prices, ordered by material, length, and id.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Price"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The prices were not loaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/prices/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: updatePrice
+      tags: [v1]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PriceUpdate"
+      responses:
+        "200":
+          description: The price was updated.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Price"
+        "400":
+          description: The cents are not valid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No price has this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The price was not saved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    delete:
+      operationId: deletePrice
+      tags: [v1]
+      responses:
+        "204":
+          description: The price was deleted.
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: No price has this id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The price was not deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
   securitySchemes:
     bearer:
@@ -870,6 +1031,56 @@ components:
           $ref: "#/components/schemas/Inches"
         roughWidthIn:
           $ref: "#/components/schemas/Inches"
+        updatedAt:
+          type: string
+          format: date-time
+    Cents:
+      type: integer
+      minimum: 0
+      maximum: 2147483647
+      x-go-type: json.Number
+      x-go-type-import:
+        path: encoding/json
+        name: Number
+      description: Whole cents. Zero is valid.
+    PriceCreate:
+      type: object
+      additionalProperties: false
+      required: [materialId, lengthIn, priceCents]
+      properties:
+        materialId:
+          type: string
+          format: uuid
+          x-go-type: string
+          description: A system material or a material the caller owns.
+        lengthIn:
+          $ref: "#/components/schemas/Inches"
+        priceCents:
+          $ref: "#/components/schemas/Cents"
+    PriceUpdate:
+      type: object
+      additionalProperties: false
+      required: [priceCents]
+      properties:
+        priceCents:
+          $ref: "#/components/schemas/Cents"
+    Price:
+      type: object
+      additionalProperties: false
+      required: [id, materialId, lengthIn, priceCents, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        materialId:
+          type: string
+          format: uuid
+          x-go-type: string
+        lengthIn:
+          $ref: "#/components/schemas/Inches"
+        priceCents:
+          $ref: "#/components/schemas/Cents"
         updatedAt:
           type: string
           format: date-time

@@ -334,6 +334,10 @@ func designHandlerWithLog(
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
 		DeleteMaterial: idleDeleteMaterial,
+		CreatePrice:    idleCreatePrice,
+		ListPrices:     idleListPrices,
+		UpdatePrice:    idleUpdatePrice,
+		DeletePrice:    idleDeletePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

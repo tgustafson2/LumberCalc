@@ -14,6 +14,9 @@ const (
 	BearerScopes bearerContextKey = "bearer.Scopes"
 )
 
+// Cents Whole cents. Zero is valid.
+type Cents = json.Number
+
 // CreateDesignRequest defines model for CreateDesignRequest.
 type CreateDesignRequest struct {
 	Description *string `json:"description,omitempty"`
@@ -112,6 +115,37 @@ type Me struct {
 	UserId      string `json:"user_id"`
 }
 
+// Price defines model for Price.
+type Price struct {
+	Id string `json:"id"`
+
+	// LengthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	LengthIn   Inches `json:"lengthIn"`
+	MaterialId string `json:"materialId"`
+
+	// PriceCents Whole cents. Zero is valid.
+	PriceCents Cents     `json:"priceCents"`
+	UpdatedAt  time.Time `json:"updatedAt"`
+}
+
+// PriceCreate defines model for PriceCreate.
+type PriceCreate struct {
+	// LengthIn Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+	LengthIn Inches `json:"lengthIn"`
+
+	// MaterialId A system material or a material the caller owns.
+	MaterialId string `json:"materialId"`
+
+	// PriceCents Whole cents. Zero is valid.
+	PriceCents Cents `json:"priceCents"`
+}
+
+// PriceUpdate defines model for PriceUpdate.
+type PriceUpdate struct {
+	// PriceCents Whole cents. Zero is valid.
+	PriceCents Cents `json:"priceCents"`
+}
+
 // ReplaceDesignRequest defines model for ReplaceDesignRequest.
 type ReplaceDesignRequest struct {
 	Description *string `json:"description,omitempty"`
@@ -140,3 +174,9 @@ type CreateMaterialJSONRequestBody = MaterialWrite
 
 // ReplaceMaterialJSONRequestBody defines body for ReplaceMaterial for application/json ContentType.
 type ReplaceMaterialJSONRequestBody = MaterialWrite
+
+// CreatePriceJSONRequestBody defines body for CreatePrice for application/json ContentType.
+type CreatePriceJSONRequestBody = PriceCreate
+
+// UpdatePriceJSONRequestBody defines body for UpdatePrice for application/json ContentType.
+type UpdatePriceJSONRequestBody = PriceUpdate

@@ -58,6 +58,10 @@ func run(ctx context.Context) error {
 		ListMaterials:  st.ListMaterials,
 		UpdateMaterial: st.UpdateMaterial,
 		DeleteMaterial: st.DeleteMaterial,
+		CreatePrice:    st.CreatePrice,
+		ListPrices:     st.ListPrices,
+		UpdatePrice:    st.UpdatePrice,
+		DeletePrice:    st.DeletePrice,
 	})
 	if err != nil {
 		return err

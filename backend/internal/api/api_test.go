@@ -226,6 +226,10 @@ func TestNewRejectsANilCopy(t *testing.T) {
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
 		DeleteMaterial: idleDeleteMaterial,
+		CreatePrice:    idleCreatePrice,
+		ListPrices:     idleListPrices,
+		UpdatePrice:    idleUpdatePrice,
+		DeletePrice:    idleDeletePrice,
 	})
 	if err == nil || err.Error() != "copy is required" {
 		t.Fatalf("err = %v", err)
@@ -283,6 +287,10 @@ func newHandlerWithLog(
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
 		DeleteMaterial: idleDeleteMaterial,
+		CreatePrice:    idleCreatePrice,
+		ListPrices:     idleListPrices,
+		UpdatePrice:    idleUpdatePrice,
+		DeletePrice:    idleDeletePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

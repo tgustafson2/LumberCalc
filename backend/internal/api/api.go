@@ -41,6 +41,10 @@ type Deps struct {
 	ListMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	UpdateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
 	DeleteMaterial func(context.Context, store.UserID, store.MaterialID) error
+	CreatePrice    func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
+	ListPrices     func(context.Context, store.UserID) ([]store.Price, error)
+	UpdatePrice    func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
+	DeletePrice    func(context.Context, store.UserID, store.PriceID) error
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -96,6 +100,18 @@ func New(d Deps) (http.Handler, error) {
 	if d.DeleteMaterial == nil {
 		return nil, errors.New("delete material is required")
 	}
+	if d.CreatePrice == nil {
+		return nil, errors.New("create price is required")
+	}
+	if d.ListPrices == nil {
+		return nil, errors.New("list prices is required")
+	}
+	if d.UpdatePrice == nil {
+		return nil, errors.New("update price is required")
+	}
+	if d.DeletePrice == nil {
+		return nil, errors.New("delete price is required")
+	}
 	a := &API{d: d, mux: http.NewServeMux()}
 	a.handle("GET /v1/me", a.me)
 	a.handle("POST /v1/designs", a.createDesign)
@@ -108,6 +124,10 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("GET /v1/materials", a.listMaterials)
 	a.handle("PUT /v1/materials/{id}", a.replaceMaterial)
 	a.handle("DELETE /v1/materials/{id}", a.deleteMaterial)
+	a.handle("POST /v1/prices", a.createPrice)
+	a.handle("GET /v1/prices", a.listPrices)
+	a.handle("PUT /v1/prices/{id}", a.updatePrice)
+	a.handle("DELETE /v1/prices/{id}", a.deletePrice)
 	a.handle("/v1/", a.notFound)
 	return a.mux, nil
 }
