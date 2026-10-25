@@ -146,6 +146,11 @@ type PriceUpdate struct {
 	PriceCents Cents `json:"priceCents"`
 }
 
+// PublishedPattern defines model for PublishedPattern.
+type PublishedPattern struct {
+	Id string `json:"id"`
+}
+
 // ReplaceDesignRequest defines model for ReplaceDesignRequest.
 type ReplaceDesignRequest struct {
 	Description *string `json:"description,omitempty"`

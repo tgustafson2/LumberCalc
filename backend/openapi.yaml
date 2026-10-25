@@ -352,6 +352,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/designs/{id}/publish:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: publishDesign
+      tags: [v1]
+      responses:
+        "200":
+          description: The design was published.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedPattern"
+        "400":
+          description: The request has a body, or the design has zero pieces.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The caller has no such design.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The design was not published.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/materials:
     post:
       operationId: createMaterial
@@ -841,6 +889,15 @@ components:
           format: date-time
         document:
           $ref: "#/components/schemas/DesignDocument"
+    PublishedPattern:
+      type: object
+      additionalProperties: false
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
     DesignDocument:
       x-go-type: store.Document
       x-go-type-import:

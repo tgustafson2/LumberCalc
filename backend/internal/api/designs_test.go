@@ -30,7 +30,7 @@ func TestCreateDesignReturns201(t *testing.T) {
 		}
 		saved = created
 		return benchDesign(t, created.Name, created.Description, 1, created.Document), nil
-	}, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil)
 	rr := callJSON(h, http.MethodPost, "/v1/designs", `{"name":"  Bench  "}`)
 	if rr.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -52,7 +52,7 @@ func TestListDesignsReturnsSummaries(t *testing.T) {
 		second := benchDesign(t, mustName(t, "Stool"), "", 1, store.Document{})
 		second.ID = mustDesignID(t, otherID)
 		return []store.DesignSummary{first.DesignSummary, second.DesignSummary}, nil
-	}, nil, nil)
+	}, nil, nil, nil)
 	rr := callJSON(h, http.MethodGet, "/v1/designs", "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -69,7 +69,7 @@ func TestListDesignsReturnsSummaries(t *testing.T) {
 func TestGetDesignReturnsTheDocument(t *testing.T) {
 	h := designHandler(t, nil, func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 		return benchDesign(t, mustName(t, "Bench"), "", 1, store.Document{}), nil
-	}, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	rr := callJSON(h, http.MethodGet, "/v1/designs/"+designID, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -93,7 +93,7 @@ func TestReplaceDesignIncrementsVersion(t *testing.T) {
 			t.Fatalf("base = %d, want 1", replaced.Base)
 		}
 		return benchDesign(t, replaced.Name, replaced.Description, 2, replaced.Document), nil
-	}, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil)
 	rr := callJSON(h, http.MethodPut, "/v1/designs/"+designID, body)
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -122,7 +122,7 @@ func TestDeleteDesignThenGetReturns404(t *testing.T) {
 		}
 		deleted = true
 		return nil
-	}, nil)
+	}, nil, nil)
 	gone := callJSON(h, http.MethodDelete, "/v1/designs/"+designID, "")
 	if gone.Code != http.StatusNoContent {
 		t.Fatalf("status = %d, body = %s", gone.Code, gone.Body.String())
@@ -137,7 +137,7 @@ func TestDeleteDesignThenGetReturns404(t *testing.T) {
 
 func TestDesignRejectsABadBody(t *testing.T) {
 	var log bytes.Buffer
-	h := designHandlerWithLog(t, &log, nil, nil, nil, nil, nil)
+	h := designHandlerWithLog(t, &log, nil, nil, nil, nil, nil, nil)
 	tests := []struct {
 		name   string
 		method string
@@ -176,7 +176,7 @@ func TestDesignRejectsABadBody(t *testing.T) {
 func TestReplaceStaleVersionReturns409(t *testing.T) {
 	h := designHandler(t, func(context.Context, store.UserID, store.Draft) (store.Design, error) {
 		return store.Design{}, store.ErrStale
-	}, nil, nil, nil, nil)
+	}, nil, nil, nil, nil, nil)
 	rr := callJSON(h, http.MethodPut, "/v1/designs/"+designID, `{"name":"Bench","version":1,"document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]}}`)
 	if rr.Code != http.StatusConflict {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -193,7 +193,7 @@ func TestDesignUnusableMaterialReturns409(t *testing.T) {
 	copyDesign := func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 		return store.Design{}, store.ErrMaterialUnusable
 	}
-	h := designHandler(t, save, nil, nil, nil, copyDesign)
+	h := designHandler(t, save, nil, nil, nil, copyDesign, nil)
 	calls := []struct {
 		method string
 		path   string
@@ -219,7 +219,7 @@ func TestDesignForeignIDReturns404(t *testing.T) {
 	h := designHandler(t, nil, func(_ context.Context, _ store.UserID, id store.DesignID) (store.Design, error) {
 		got = id
 		return store.Design{}, store.ErrNotFound
-	}, nil, nil, nil)
+	}, nil, nil, nil, nil)
 	rr := callJSON(h, http.MethodGet, "/v1/designs/"+otherID, "")
 	assertNotFound(t, rr)
 	if got.String() != otherID {
@@ -234,7 +234,7 @@ func TestCopyDesignReturns201(t *testing.T) {
 			t.Fatalf("id = %s", id)
 		}
 		return benchDesign(t, mustName(t, "Bench copy"), "cut list", 1, store.Document{}), nil
-	})
+	}, nil)
 	const want = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench copy","updatedAt":"2026-01-02T03:04:05Z","version":1}`
 	for _, body := range []string{"", " \t\n"} {
 		rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/copy", body)
@@ -254,7 +254,7 @@ func TestCopyDesignRejectsABody(t *testing.T) {
 	h := designHandler(t, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 		t.Fatal("copy was called")
 		return store.Design{}, nil
-	})
+	}, nil)
 	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/copy", `{}`)
 	if rr.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
@@ -267,7 +267,7 @@ func TestCopyDesignRejectsABody(t *testing.T) {
 func TestCopyDesignReturns404WhenMissing(t *testing.T) {
 	h := designHandler(t, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 		return store.Design{}, store.ErrNotFound
-	})
+	}, nil)
 	assertNotFound(t, callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/copy", ""))
 }
 
@@ -275,8 +275,72 @@ func TestCopyDesignRejectsABadID(t *testing.T) {
 	h := designHandler(t, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 		t.Fatal("copy was called")
 		return store.Design{}, nil
-	})
+	}, nil)
 	assertNotFound(t, callJSON(h, http.MethodPost, "/v1/designs/not-a-uuid/copy", `{}`))
+}
+
+func TestPublishDesignReturns200(t *testing.T) {
+	const want = `{"id":"00000000-0000-0000-0000-000000000000"}`
+	h := designHandler(t, nil, nil, nil, nil, nil, func(_ context.Context, _ store.UserID, id store.DesignID) (store.PatternID, error) {
+		if id.String() != designID {
+			t.Fatalf("id = %s", id)
+		}
+		return store.PatternID{}, nil
+	})
+	for _, body := range []string{"", " \t\n"} {
+		rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", body)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+		}
+		if rr.Header().Get("Location") != "" {
+			t.Fatalf("Location = %q", rr.Header().Get("Location"))
+		}
+		if strings.TrimSpace(rr.Body.String()) != want {
+			t.Fatalf("body = %s", rr.Body.String())
+		}
+	}
+}
+
+func TestPublishDesignRejectsABody(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		t.Fatal("publish was called")
+		return store.PatternID{}, nil
+	})
+	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", `{}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if strings.TrimSpace(rr.Body.String()) != `{"error":"bad request"}` {
+		t.Fatalf("body = %s", rr.Body.String())
+	}
+}
+
+func TestPublishDesignReturns404WhenMissing(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		return store.PatternID{}, store.ErrNotFound
+	})
+	assertNotFound(t, callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", ""))
+}
+
+func TestPublishDesignRejectsABadID(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		t.Fatal("publish was called")
+		return store.PatternID{}, nil
+	})
+	assertNotFound(t, callJSON(h, http.MethodPost, "/v1/designs/not-a-uuid/publish", `{}`))
+}
+
+func TestPublishDesignReturnsEmptyDesign(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		return store.PatternID{}, store.ErrEmptyDesign
+	})
+	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Equal(bytes.TrimSpace(rr.Body.Bytes()), []byte(`{"error":"empty_design"}`)) {
+		t.Fatalf("body = %s", rr.Body.Bytes())
+	}
 }
 
 func designHandler(
@@ -286,9 +350,10 @@ func designHandler(
 	list func(context.Context, store.UserID) ([]store.DesignSummary, error),
 	del func(context.Context, store.UserID, store.DesignID) error,
 	copy func(context.Context, store.UserID, store.DesignID) (store.Design, error),
+	publish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
 ) http.Handler {
 	t.Helper()
-	return designHandlerWithLog(t, nil, save, get, list, del, copy)
+	return designHandlerWithLog(t, nil, save, get, list, del, copy, publish)
 }
 
 func designHandlerWithLog(
@@ -299,6 +364,7 @@ func designHandlerWithLog(
 	list func(context.Context, store.UserID) ([]store.DesignSummary, error),
 	del func(context.Context, store.UserID, store.DesignID) error,
 	copy func(context.Context, store.UserID, store.DesignID) (store.Design, error),
+	publish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
 ) http.Handler {
 	t.Helper()
 	w := io.Writer(io.Discard)
@@ -335,6 +401,12 @@ func designHandlerWithLog(
 			return store.Design{}, nil
 		}
 	}
+	if publish == nil {
+		publish = func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			t.Fatal("publish was called")
+			return store.PatternID{}, nil
+		}
+	}
 	h, err := New(Deps{
 		Log:            slog.New(slog.NewTextHandler(w, nil)),
 		Authenticate:   okAuth,
@@ -345,6 +417,7 @@ func designHandlerWithLog(
 		List:           list,
 		Delete:         del,
 		Copy:           copy,
+		Publish:        publish,
 		CreateMaterial: idleCreateMaterial,
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,

@@ -219,6 +219,10 @@ func priceHandler(
 			t.Fatal("copy was called")
 			return store.Design{}, nil
 		},
+		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			t.Fatal("publish was called")
+			return store.PatternID{}, nil
+		},
 		CreateMaterial: idleCreateMaterial,
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
