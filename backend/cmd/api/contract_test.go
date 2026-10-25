@@ -40,6 +40,7 @@ type exchange struct {
 	delete         func(context.Context, store.UserID, store.DesignID) error
 	copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 	publish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
 	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -212,6 +213,42 @@ var exchanges = map[string][]exchange{
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
 			publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 				return store.PatternID{}, store.ErrEmptyDesign
+			},
+		},
+	},
+	"unpublishDesign": {
+		{
+			name:         "unpublished",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/unpublish",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+				return store.PatternID{}, nil
+			},
+		},
+		{
+			name:         "body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/unpublish",
+			body:         `{}`,
+			validRequest: false,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:   "no session",
+			path:   "/v1/designs/00000000-0000-4000-8000-000000000001/unpublish",
+			status: http.StatusUnauthorized,
+			auth: func(*http.Request) (store.ClerkUserID, error) {
+				return store.ClerkUserID{}, clerkauth.ErrUnauthenticated
+			},
+		},
+		{
+			name:   "server error",
+			path:   "/v1/designs/00000000-0000-4000-8000-000000000001/unpublish",
+			status: http.StatusInternalServerError,
+			auth: func(*http.Request) (store.ClerkUserID, error) {
+				return store.ClerkUserID{}, errProbe
 			},
 		},
 	},
@@ -599,6 +636,12 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.PatternID{}, store.ErrNotFound
 		}
 	}
+	unpublishDesign := c.unpublish
+	if unpublishDesign == nil {
+		unpublishDesign = func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, store.ErrNotFound
+		}
+	}
 	createMaterial := c.createMaterial
 	if createMaterial == nil {
 		createMaterial = func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
@@ -662,6 +705,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		Delete:         deleteDesign,
 		Copy:           copyDesign,
 		Publish:        publishDesign,
+		Unpublish:      unpublishDesign,
 		CreateMaterial: createMaterial,
 		ListMaterials:  listMaterials,
 		UpdateMaterial: updateMaterial,

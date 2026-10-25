@@ -34,6 +34,7 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		Delete:         st.Delete,
 		Copy:           st.Copy,
 		Publish:        st.Publish,
+		Unpublish:      st.Unpublish,
 		CreateMaterial: st.CreateMaterial,
 		ListMaterials:  st.ListMaterials,
 		UpdateMaterial: st.UpdateMaterial,
@@ -86,6 +87,7 @@ func TestGetMaterialsReturnsTheSystemCatalog(t *testing.T) {
 		Delete:         st.Delete,
 		Copy:           st.Copy,
 		Publish:        st.Publish,
+		Unpublish:      st.Unpublish,
 		CreateMaterial: st.CreateMaterial,
 		ListMaterials:  st.ListMaterials,
 		UpdateMaterial: st.UpdateMaterial,
@@ -208,6 +210,7 @@ func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {
 		Delete:         st.Delete,
 		Copy:           st.Copy,
 		Publish:        st.Publish,
+		Unpublish:      st.Unpublish,
 		CreateMaterial: st.CreateMaterial,
 		ListMaterials:  st.ListMaterials,
 		UpdateMaterial: st.UpdateMaterial,
@@ -363,4 +366,110 @@ func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {
 
 	clerk = ownerClerk
 	sameAs(callJSON(h, http.MethodGet, "/v1/designs/"+stool.Id, ""), missing)
+}
+
+func TestUnpublishThenPublishKeepsThePatternID(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	st := store.New(pool)
+	const (
+		ownerClerk = "user_unpublish_owner"
+		otherClerk = "user_unpublish_other"
+	)
+	clerk := ownerClerk
+	h, err := New(Deps{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: func(*http.Request) (store.ClerkUserID, error) {
+			return mustClerk(t, clerk), nil
+		},
+		EnsureUser: st.EnsureUser,
+		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
+			return "Ada", nil
+		},
+		Save:           st.Save,
+		Get:            st.Get,
+		List:           st.List,
+		Delete:         st.Delete,
+		Copy:           st.Copy,
+		Publish:        st.Publish,
+		Unpublish:      st.Unpublish,
+		CreateMaterial: st.CreateMaterial,
+		ListMaterials:  st.ListMaterials,
+		UpdateMaterial: st.UpdateMaterial,
+		DeleteMaterial: st.DeleteMaterial,
+		CreatePrice:    st.CreatePrice,
+		ListPrices:     st.ListPrices,
+		UpdatePrice:    st.UpdatePrice,
+		DeletePrice:    st.DeletePrice,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed := call(h, http.MethodGet, "/v1/materials", "Bearer token")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", listed.Code, listed.Body.String())
+	}
+	var catalog []Material
+	if err := json.Unmarshal(listed.Body.Bytes(), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) == 0 || catalog[0].Id == "" {
+		t.Fatal("catalog is empty")
+	}
+	body := `{"name":"Bench","document":{"schemaVersion":1,"units":"in","pieces":[{"id":"aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee","name":"stud","materialId":"` + catalog[0].Id + `","roughCut":false,"lengthIn":8,"continuity":{"x":true,"y":false,"z":false},"transform":{"positionIn":[0,0,0],"rotationDeg":[0,0,0]}}],"connections":[]}}`
+	created := callJSON(h, http.MethodPost, "/v1/designs", body)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", created.Code, created.Body.String())
+	}
+	var design Design
+	if err := json.Unmarshal(created.Body.Bytes(), &design); err != nil {
+		t.Fatal(err)
+	}
+	path := "/v1/designs/" + design.Id
+
+	readPatternID := func(rr *httptest.ResponseRecorder) string {
+		t.Helper()
+		var got PublishedPattern
+		if err := json.Unmarshal(rr.Body.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Id
+	}
+
+	published := callJSON(h, http.MethodPost, path+"/publish", "")
+	if published.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", published.Code, published.Body.String())
+	}
+	patternID := readPatternID(published)
+	if patternID == "" || patternID == "00000000-0000-0000-0000-000000000000" {
+		t.Fatalf("id = %s", patternID)
+	}
+
+	hidden := callJSON(h, http.MethodPost, path+"/unpublish", "")
+	if hidden.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", hidden.Code, hidden.Body.String())
+	}
+	if got := readPatternID(hidden); got != patternID {
+		t.Fatalf("id = %s, want %s", got, patternID)
+	}
+
+	again := callJSON(h, http.MethodPost, path+"/unpublish", "")
+	if again.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", again.Code, again.Body.String())
+	}
+	if got := readPatternID(again); got != patternID {
+		t.Fatalf("id = %s, want %s", got, patternID)
+	}
+
+	clerk = otherClerk
+	assertNotFound(t, callJSON(h, http.MethodPost, path+"/unpublish", ""))
+
+	clerk = ownerClerk
+	republished := callJSON(h, http.MethodPost, path+"/publish", "")
+	if republished.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", republished.Code, republished.Body.String())
+	}
+	if got := readPatternID(republished); got != patternID {
+		t.Fatalf("id = %s, want %s", got, patternID)
+	}
 }

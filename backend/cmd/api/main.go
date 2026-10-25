@@ -55,6 +55,7 @@ func run(ctx context.Context) error {
 		Delete:         st.Delete,
 		Copy:           st.Copy,
 		Publish:        st.Publish,
+		Unpublish:      st.Unpublish,
 		CreateMaterial: st.CreateMaterial,
 		ListMaterials:  st.ListMaterials,
 		UpdateMaterial: st.UpdateMaterial,

@@ -46,6 +46,9 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			return store.PatternID{}, store.ErrNotFound
 		},
+		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, store.ErrNotFound
+		},
 		CreateMaterial: func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
 			return store.Material{}, store.ErrMaterialNotFound
 		},
