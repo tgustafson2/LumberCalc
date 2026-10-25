@@ -21,3 +21,9 @@ SET name = excluded.name,
     is_public = true,
     updated_at = now()
 RETURNING id;
+
+-- name: SetPatternPrivate :one
+UPDATE patterns
+SET is_public = false
+WHERE source_design_id = sqlc.arg('source_design_id')
+RETURNING id;

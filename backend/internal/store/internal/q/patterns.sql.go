@@ -11,6 +11,20 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const setPatternPrivate = `-- name: SetPatternPrivate :one
+UPDATE patterns
+SET is_public = false
+WHERE source_design_id = $1
+RETURNING id
+`
+
+func (q *Queries) SetPatternPrivate(ctx context.Context, sourceDesignID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, setPatternPrivate, sourceDesignID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const upsertPatternFromDesign = `-- name: UpsertPatternFromDesign :one
 INSERT INTO patterns (
     source_design_id,

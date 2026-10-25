@@ -243,6 +243,42 @@ func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID) (Pattern
 	return patternID, nil
 }
 
+// Unpublish hides the pattern of one live design.
+// An empty live document still hides the pattern.
+// A second call keeps updated_at.
+// A missing pattern is ErrNotFound.
+func (s *Store) Unpublish(ctx context.Context, owner UserID, id DesignID) (PatternID, error) {
+	var patternID PatternID
+	err := s.withTx(ctx, func(qtx *q.Queries) error {
+		locked, err := qtx.LockLiveDesign(ctx, q.LockLiveDesignParams{
+			ID:      uuidPG(id.v),
+			OwnerID: uuidPG(owner.v),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		raw, err := qtx.SetPatternPrivate(ctx, locked.ID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		if !raw.Valid {
+			return errors.New("pattern row is missing id")
+		}
+		patternID = PatternID{v: raw.Bytes}
+		return nil
+	})
+	if err != nil {
+		return PatternID{}, err
+	}
+	return patternID, nil
+}
+
 // Copy deep-clones one live design that this owner still has.
 // A second call inserts another design. It does not return the first clone.
 // A missing, foreign, or soft-deleted source is ErrNotFound.
