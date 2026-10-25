@@ -150,6 +150,24 @@ func (a *API) publishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	server.WriteJSON(w, http.StatusOK, PublishedPattern{Id: patternID.String()})
 }
 
+func (a *API) unpublishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
+	id, err := store.ParseDesignID(r.PathValue("id"))
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	if err := rejectRequestBody(r.Body); err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	patternID, err := a.d.Unpublish(r.Context(), c.UserID(), id)
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	server.WriteJSON(w, http.StatusOK, PublishedPattern{Id: patternID.String()})
+}
+
 func rejectRequestBody(body io.Reader) error {
 	raw, err := io.ReadAll(io.LimitReader(body, maxBody+1))
 	if err != nil {

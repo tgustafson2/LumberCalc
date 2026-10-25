@@ -38,6 +38,7 @@ type Deps struct {
 	Delete         func(context.Context, store.UserID, store.DesignID) error
 	Copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
 	Publish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	Unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
 	CreateMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	ListMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	UpdateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -92,6 +93,9 @@ func New(d Deps) (http.Handler, error) {
 	if d.Publish == nil {
 		return nil, errors.New("publish is required")
 	}
+	if d.Unpublish == nil {
+		return nil, errors.New("unpublish is required")
+	}
 	if d.CreateMaterial == nil {
 		return nil, errors.New("create material is required")
 	}
@@ -125,6 +129,7 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("DELETE /v1/designs/{id}", a.deleteDesign)
 	a.handle("POST /v1/designs/{id}/copy", a.copyDesign)
 	a.handle("POST /v1/designs/{id}/publish", a.publishDesign)
+	a.handle("POST /v1/designs/{id}/unpublish", a.unpublishDesign)
 	a.handle("POST /v1/materials", a.createMaterial)
 	a.handle("GET /v1/materials", a.listMaterials)
 	a.handle("PUT /v1/materials/{id}", a.replaceMaterial)

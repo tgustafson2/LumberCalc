@@ -400,6 +400,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/designs/{id}/unpublish:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: unpublishDesign
+      tags: [v1]
+      responses:
+        "200":
+          description: The design was unpublished.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublishedPattern"
+        "400":
+          description: The request has a body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The caller has no live design with this id, or that design has no pattern.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The design was not unpublished.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/materials:
     post:
       operationId: createMaterial

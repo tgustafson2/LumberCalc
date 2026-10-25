@@ -219,6 +219,10 @@ func materialHandler(
 			t.Fatal("publish was called")
 			return store.PatternID{}, nil
 		},
+		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			t.Fatal("unpublish was called")
+			return store.PatternID{}, nil
+		},
 		CreateMaterial: create,
 		ListMaterials:  list,
 		UpdateMaterial: update,

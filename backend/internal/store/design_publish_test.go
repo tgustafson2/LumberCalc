@@ -498,6 +498,510 @@ func TestPublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 	}
 }
 
+func TestUnpublishSetsIsPublicFalse(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:        name,
+		Description: "cut list",
+		Document:    testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := mustPattern(t, pool, created.ID)
+	clock := readDesignClock(t, pool, created.ID)
+
+	got, err := s.Unpublish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != patternID {
+		t.Fatalf("id = %s, want %s", got, patternID)
+	}
+	if n := patternCount(t, pool, created.ID); n != 1 {
+		t.Fatalf("patterns = %d, want 1", n)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if row.isPublic {
+		t.Fatal("is_public = true")
+	}
+	if row.id != before.id || row.sourceID != before.sourceID || row.publisherID != before.publisherID {
+		t.Fatalf("id = %s source = %s publisher = %s", row.id, row.sourceID, row.publisherID)
+	}
+	if row.name != before.name || row.description != before.description || row.schemaVersion != before.schemaVersion {
+		t.Fatalf("name = %q description = %q schema_version = %d", row.name, row.description, row.schemaVersion)
+	}
+	if !row.createdAt.Equal(before.createdAt) || !row.updatedAt.Equal(before.updatedAt) {
+		t.Fatalf("created_at = %s updated_at = %s, before created_at = %s updated_at = %s", row.createdAt, row.updatedAt, before.createdAt, before.updatedAt)
+	}
+	if !patternDocumentEquals(t, pool, row.id, before.document) {
+		t.Fatal("pattern document changed")
+	}
+	after := readDesignClock(t, pool, created.ID)
+	if after.version != clock.version || after.schemaVersion != clock.schemaVersion || !after.updatedAt.Equal(clock.updatedAt) {
+		t.Fatalf("version %d schema_version %d updated_at %s, before version %d schema_version %d updated_at %s", after.version, after.schemaVersion, after.updatedAt, clock.version, clock.schemaVersion, clock.updatedAt)
+	}
+}
+
+func TestUnpublishAgainKeepsUpdatedAt(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := s.Unpublish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, created.ID)
+	tag, err := pool.Exec(ctx, `
+		UPDATE patterns
+		SET updated_at = created_at - interval '1 day'
+		WHERE id = $1
+	`, patternID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("updated rows = %d", tag.RowsAffected())
+	}
+	backdated := mustPattern(t, pool, created.ID)
+
+	second, err := s.Unpublish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second != first || second != patternID {
+		t.Fatalf("id = %s, want %s", second, patternID)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if row.isPublic {
+		t.Fatal("is_public = true")
+	}
+	if !row.updatedAt.Equal(backdated.updatedAt) {
+		t.Fatalf("updated_at = %s, want %s", row.updatedAt, backdated.updatedAt)
+	}
+	if !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+}
+
+func TestUnpublishNotFoundLeavesThePattern(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	other := testUser(t, s, "user_other")
+	pine := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Unpublish(ctx, owner, created.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("unpublished err = %v", err)
+	}
+	if n := patternCount(t, pool, created.ID); n != 0 {
+		t.Fatalf("patterns = %d, want 0", n)
+	}
+	missing, err := store.ParseDesignID("00000000-0000-4000-8000-000000000099")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Unpublish(ctx, owner, missing); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("missing err = %v", err)
+	}
+
+	patternID, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, created.ID)
+	if !published.isPublic {
+		t.Fatal("is_public = false")
+	}
+	if _, err := s.Unpublish(ctx, other, created.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("foreign err = %v", err)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if row.id != patternID.String() || !row.isPublic || !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
+	}
+
+	if err := s.Delete(ctx, owner, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Unpublish(ctx, owner, created.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("deleted err = %v", err)
+	}
+	row = mustPattern(t, pool, created.ID)
+	if row.id != patternID.String() || !row.isPublic {
+		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
+	}
+	if !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+}
+
+func TestUnpublishEmptyDocumentHidesThePattern(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, created.ID)
+	saved, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: store.Document{},
+		Base:     created.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := readDesignClock(t, pool, created.ID)
+
+	got, err := s.Unpublish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != patternID {
+		t.Fatalf("id = %s, want %s", got, patternID)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if row.isPublic {
+		t.Fatal("is_public = true")
+	}
+	if !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+	if row.sameDocument {
+		t.Fatal("pattern document matches the empty design")
+	}
+	after := readDesignClock(t, pool, created.ID)
+	if after.version != clock.version || !after.updatedAt.Equal(clock.updatedAt) || after.version != saved.Version {
+		t.Fatalf("version = %d updated_at = %s, saved version = %d", after.version, after.updatedAt, saved.Version)
+	}
+}
+
+func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	oak := insertMaterial(t, pool, owner, "oak")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:     name,
+		Document: testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cloneName, err := store.ParseName("Stool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clone, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:        cloneName,
+		Description: "kept",
+		Document:    testDocument(t, oak),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag, err := pool.Exec(ctx, `
+		UPDATE designs
+		SET copied_from_pattern_id = $2
+		WHERE id = $1 AND copied_from_design_id IS NULL
+	`, clone.ID.String(), patternID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("updated rows = %d", tag.RowsAffected())
+	}
+	beforeID, beforeDocument, beforeUpdated := readCopyColumns(t, pool, clone.ID)
+
+	if _, err := s.Unpublish(ctx, owner, source.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	afterID, _, afterUpdated := readCopyColumns(t, pool, clone.ID)
+	if afterID != beforeID || afterID != patternID.String() {
+		t.Fatalf("copied_from_pattern_id = %s, want %s", afterID, patternID)
+	}
+	if !designDocumentEquals(t, pool, clone.ID, beforeDocument) {
+		t.Fatal("clone document changed")
+	}
+	if !afterUpdated.Equal(beforeUpdated) {
+		t.Fatalf("updated_at = %s, want %s", afterUpdated, beforeUpdated)
+	}
+}
+
+func TestPublishAfterUnpublishRefreshesTheDocument(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	oak := insertMaterial(t, pool, owner, "oak")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:        name,
+		Description: "cut list",
+		Document:    testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, created.ID)
+	nextName, err := store.ParseName("Stool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	saved, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:          created.ID,
+		Name:        nextName,
+		Description: "again",
+		Document:    testDocument(t, oak),
+		Base:        created.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hidden, err := s.Unpublish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hidden != patternID {
+		t.Fatalf("id = %s, want %s", hidden, patternID)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if row.isPublic {
+		t.Fatal("is_public = true")
+	}
+	if !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+
+	again, err := s.Publish(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != patternID {
+		t.Fatalf("id = %s, want %s", again, patternID)
+	}
+	row = mustPattern(t, pool, created.ID)
+	if !row.isPublic {
+		t.Fatal("is_public = false")
+	}
+	if !row.sameDocument {
+		t.Fatal("pattern document differs from the design document")
+	}
+	if row.name != saved.Name.String() || row.description != saved.Description {
+		t.Fatalf("name = %q description = %q", row.name, row.description)
+	}
+}
+
+func TestUnpublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	if pool.Config().MaxConns < 2 {
+		t.Fatalf("MaxConns = %d, want at least 2", pool.Config().MaxConns)
+	}
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source, err := s.Save(ctx, owner, store.CreateDraft{
+		Name:        name,
+		Description: "cut list",
+		Document:    testDocument(t, pine),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	patternID, err := s.Publish(ctx, owner, source.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, source.ID)
+
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+	var locked string
+	err = tx.QueryRow(ctx, `
+		SELECT id::text
+		FROM designs
+		WHERE id = $1 AND owner_id = $2 AND deleted_at IS NULL
+		FOR UPDATE
+	`, source.ID.String(), owner.String()).Scan(&locked)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		_, unpublishErr := s.Unpublish(ctx, owner, source.ID)
+		errCh <- unpublishErr
+	}()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		var waiting int
+		// A row lock wait is an ungranted transactionid lock on the holder.
+		if err := tx.QueryRow(ctx, `
+			SELECT count(*)
+			FROM pg_locks waiter
+			JOIN pg_locks holder
+			  ON holder.locktype = 'transactionid'
+			 AND holder.granted
+			 AND holder.pid = pg_backend_pid()
+			 AND waiter.locktype = 'transactionid'
+			 AND NOT waiter.granted
+			 AND waiter.transactionid = holder.transactionid
+			 AND waiter.pid <> pg_backend_pid()
+		`).Scan(&waiting); err != nil {
+			t.Fatal(err)
+		}
+		if waiting > 0 {
+			break
+		}
+		select {
+		case err := <-errCh:
+			t.Fatalf("unpublish returned before it waited: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("unpublish did not wait on the source lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	select {
+	case err := <-errCh:
+		t.Fatalf("unpublish returned before the delete committed: %v", err)
+	default:
+	}
+	if _, err := tx.Exec(ctx, `UPDATE designs SET deleted_at = now(), updated_at = now() WHERE id = $1`, source.ID.String()); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("err = %v, want ErrNotFound", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("unpublish did not return")
+	}
+	row := mustPattern(t, pool, source.ID)
+	if row.id != patternID.String() || !row.isPublic {
+		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
+	}
+	if !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+}
+
+func readCopyColumns(t *testing.T, pool *pgxpool.Pool, id store.DesignID) (patternID string, document []byte, updatedAt time.Time) {
+	t.Helper()
+	err := pool.QueryRow(context.Background(), `
+		SELECT copied_from_pattern_id::text, document, updated_at
+		FROM designs
+		WHERE id = $1
+	`, id.String()).Scan(&patternID, &document, &updatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return patternID, document, updatedAt
+}
+
+func designDocumentEquals(t *testing.T, pool *pgxpool.Pool, id store.DesignID, document []byte) bool {
+	t.Helper()
+	var same bool
+	err := pool.QueryRow(context.Background(), `
+		SELECT document = $2::jsonb
+		FROM designs
+		WHERE id = $1
+	`, id.String(), document).Scan(&same)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return same
+}
+
 type patternRow struct {
 	id            string
 	sourceID      string

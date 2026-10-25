@@ -225,6 +225,9 @@ func TestNewRejectsANilCopy(t *testing.T) {
 		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			return store.PatternID{}, nil
 		},
+		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, nil
+		},
 		CreateMaterial: idleCreateMaterial,
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
@@ -260,6 +263,9 @@ func TestNewRejectsANilPublish(t *testing.T) {
 		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 			return store.Design{}, nil
 		},
+		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, nil
+		},
 		CreateMaterial: idleCreateMaterial,
 		ListMaterials:  idleListMaterials,
 		UpdateMaterial: idleUpdateMaterial,
@@ -270,6 +276,44 @@ func TestNewRejectsANilPublish(t *testing.T) {
 		DeletePrice:    idleDeletePrice,
 	})
 	if err == nil || err.Error() != "publish is required" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestNewRejectsANilUnpublish(t *testing.T) {
+	_, err := New(Deps{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: okAuth,
+		EnsureUser:   okEnsure,
+		DisplayName:  okName,
+		Save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
+			return store.Design{}, nil
+		},
+		Get: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, nil
+		},
+		List: func(context.Context, store.UserID) ([]store.DesignSummary, error) {
+			return nil, nil
+		},
+		Delete: func(context.Context, store.UserID, store.DesignID) error {
+			return nil
+		},
+		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+			return store.Design{}, nil
+		},
+		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, nil
+		},
+		CreateMaterial: idleCreateMaterial,
+		ListMaterials:  idleListMaterials,
+		UpdateMaterial: idleUpdateMaterial,
+		DeleteMaterial: idleDeleteMaterial,
+		CreatePrice:    idleCreatePrice,
+		ListPrices:     idleListPrices,
+		UpdatePrice:    idleUpdatePrice,
+		DeletePrice:    idleDeletePrice,
+	})
+	if err == nil || err.Error() != "unpublish is required" {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -323,6 +367,10 @@ func newHandlerWithLog(
 		},
 		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			t.Fatal("publish was called")
+			return store.PatternID{}, nil
+		},
+		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			t.Fatal("unpublish was called")
 			return store.PatternID{}, nil
 		},
 		CreateMaterial: idleCreateMaterial,
