@@ -147,7 +147,29 @@ func bearer(header string) (string, bool) {
 	return token, true
 }
 
+// PublicName asks Clerk for a name that other users may see.
+// It uses the DisplayName order without the email.
+func (c *Clerk) PublicName(ctx context.Context, id store.ClerkUserID) (store.PublicName, error) {
+	ctx, cancel := context.WithTimeout(ctx, displayNameTimeout)
+	defer cancel()
+	u, err := c.users.Get(ctx, id.String())
+	if err != nil {
+		return store.PublicName{}, err
+	}
+	return store.ParsePublicName(profileName(u), id), nil
+}
+
 func formatDisplayName(u *clerk.User) string {
+	if u == nil {
+		return ""
+	}
+	if name := profileName(u); name != "" {
+		return name
+	}
+	return primaryEmail(u)
+}
+
+func profileName(u *clerk.User) string {
 	if u == nil {
 		return ""
 	}
@@ -161,10 +183,7 @@ func formatDisplayName(u *clerk.User) string {
 	case last != "":
 		return last
 	}
-	if name := strings.TrimSpace(deref(u.Username)); name != "" {
-		return name
-	}
-	return primaryEmail(u)
+	return strings.TrimSpace(deref(u.Username))
 }
 
 func primaryEmail(u *clerk.User) string {

@@ -222,20 +222,23 @@ func TestNewRejectsANilCopy(t *testing.T) {
 		Delete: func(context.Context, store.UserID, store.DesignID) error {
 			return nil
 		},
-		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		Publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			return store.PatternID{}, nil
 		},
 		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			return store.PatternID{}, nil
 		},
-		CreateMaterial: idleCreateMaterial,
-		ListMaterials:  idleListMaterials,
-		UpdateMaterial: idleUpdateMaterial,
-		DeleteMaterial: idleDeleteMaterial,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		CreateMaterial:     idleCreateMaterial,
+		ListMaterials:      idleListMaterials,
+		UpdateMaterial:     idleUpdateMaterial,
+		DeleteMaterial:     idleDeleteMaterial,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err == nil || err.Error() != "copy is required" {
 		t.Fatalf("err = %v", err)
@@ -266,14 +269,17 @@ func TestNewRejectsANilPublish(t *testing.T) {
 		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			return store.PatternID{}, nil
 		},
-		CreateMaterial: idleCreateMaterial,
-		ListMaterials:  idleListMaterials,
-		UpdateMaterial: idleUpdateMaterial,
-		DeleteMaterial: idleDeleteMaterial,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		CreateMaterial:     idleCreateMaterial,
+		ListMaterials:      idleListMaterials,
+		UpdateMaterial:     idleUpdateMaterial,
+		DeleteMaterial:     idleDeleteMaterial,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err == nil || err.Error() != "publish is required" {
 		t.Fatalf("err = %v", err)
@@ -301,17 +307,20 @@ func TestNewRejectsANilUnpublish(t *testing.T) {
 		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 			return store.Design{}, nil
 		},
-		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		Publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			return store.PatternID{}, nil
 		},
-		CreateMaterial: idleCreateMaterial,
-		ListMaterials:  idleListMaterials,
-		UpdateMaterial: idleUpdateMaterial,
-		DeleteMaterial: idleDeleteMaterial,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		CreateMaterial:     idleCreateMaterial,
+		ListMaterials:      idleListMaterials,
+		UpdateMaterial:     idleUpdateMaterial,
+		DeleteMaterial:     idleDeleteMaterial,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err == nil || err.Error() != "unpublish is required" {
 		t.Fatalf("err = %v", err)
@@ -365,7 +374,7 @@ func newHandlerWithLog(
 			t.Fatal("copy was called")
 			return store.Design{}, nil
 		},
-		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		Publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			t.Fatal("publish was called")
 			return store.PatternID{}, nil
 		},
@@ -373,14 +382,17 @@ func newHandlerWithLog(
 			t.Fatal("unpublish was called")
 			return store.PatternID{}, nil
 		},
-		CreateMaterial: idleCreateMaterial,
-		ListMaterials:  idleListMaterials,
-		UpdateMaterial: idleUpdateMaterial,
-		DeleteMaterial: idleDeleteMaterial,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		CreateMaterial:     idleCreateMaterial,
+		ListMaterials:      idleListMaterials,
+		UpdateMaterial:     idleUpdateMaterial,
+		DeleteMaterial:     idleDeleteMaterial,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -448,6 +448,79 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/patterns:
+    get:
+      operationId: listPatterns
+      tags: [v1]
+      responses:
+        "200":
+          description: Every public pattern, newest publishedAt first, then id ascending. The list is the same for every caller.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PatternSummary"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The patterns were not loaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/patterns/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getPattern
+      tags: [v1]
+      responses:
+        "200":
+          description: A public pattern, or a private pattern read by its publisher.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pattern"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The id is not a uuid, no pattern has this id, or the pattern is private and the caller is not its publisher.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The pattern was not loaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/materials:
     post:
       operationId: createMaterial
@@ -946,6 +1019,101 @@ components:
           type: string
           format: uuid
           x-go-type: string
+    PatternSummary:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, publisherName, publishedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        publisherName:
+          type: string
+          minLength: 1
+          nullable: true
+          description: The publisher name stored at the last publish. Null when no safe name was stored.
+        publishedAt:
+          type: string
+          format: date-time
+    Pattern:
+      type: object
+      additionalProperties: false
+      required: [id, name, description, publisherName, publishedAt, isPublic, document]
+      properties:
+        id:
+          type: string
+          format: uuid
+          x-go-type: string
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+        publisherName:
+          type: string
+          minLength: 1
+          nullable: true
+          description: The publisher name stored at the last publish. Null when no safe name was stored.
+        publishedAt:
+          type: string
+          format: date-time
+        isPublic:
+          type: boolean
+          description: False only when the caller is the publisher and the pattern is private.
+        document:
+          $ref: "#/components/schemas/PatternDocument"
+    PatternDocument:
+      x-go-type: store.PublicDocument
+      x-go-type-import:
+        path: lumbercalc/backend/internal/store
+      description: The published design document. A piece keeps materialId only when it is a system material. Any other materialId is null.
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, units, pieces, connections]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        units:
+          type: string
+          enum: [in]
+        pieces:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatternPiece"
+        connections:
+          type: array
+          items:
+            $ref: "#/components/schemas/DesignConnection"
+    PatternPiece:
+      type: object
+      additionalProperties: false
+      required: [id, name, materialId, lengthIn, continuity, transform]
+      properties:
+        id:
+          $ref: "#/components/schemas/DocumentUuid"
+        name:
+          type: string
+        materialId:
+          type: string
+          format: uuid
+          nullable: true
+        roughCut:
+          type: boolean
+          default: false
+        lengthIn:
+          type: number
+          description: Exact inch length. The numeric value stays exact. An exponent form can come back as a plain decimal.
+        continuity:
+          $ref: "#/components/schemas/DesignContinuity"
+        transform:
+          $ref: "#/components/schemas/DesignTransform"
     DesignDocument:
       x-go-type: store.Document
       x-go-type-import:

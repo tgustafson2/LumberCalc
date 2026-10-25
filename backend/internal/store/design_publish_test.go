@@ -35,7 +35,7 @@ func TestPublishInsertsOnePattern(t *testing.T) {
 	}
 	before := readDesignClock(t, pool, created.ID)
 
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestPublishAgainKeepsTheID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := s.Publish(ctx, owner, created.ID)
+	first, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestPublishAgainKeepsTheID(t *testing.T) {
 	}
 	versionAfterSave := readDesignClock(t, pool, created.ID).version
 
-	second, err := s.Publish(ctx, owner, created.ID)
+	second, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestSaveAfterPublishLeavesThePatternDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Publish(ctx, owner, created.ID); err != nil {
+	if _, err := s.Publish(ctx, owner, created.ID, store.PublicName{}); err != nil {
 		t.Fatal(err)
 	}
 	published := mustPattern(t, pool, created.ID)
@@ -244,7 +244,7 @@ func TestPublishEmptyDesignWritesNoPattern(t *testing.T) {
 		t.Fatal(err)
 	}
 	before := readDesignClock(t, pool, created.ID)
-	_, err = s.Publish(ctx, owner, created.ID)
+	_, err = s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if !errors.Is(err, store.ErrEmptyDesign) {
 		t.Fatalf("err = %v", err)
 	}
@@ -274,7 +274,7 @@ func TestPublishEmptyAfterSaveLeavesThePattern(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -288,7 +288,7 @@ func TestPublishEmptyAfterSaveLeavesThePattern(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.Publish(ctx, owner, created.ID)
+	_, err = s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if !errors.Is(err, store.ErrEmptyDesign) {
 		t.Fatalf("err = %v", err)
 	}
@@ -323,17 +323,17 @@ func TestPublishNotFoundLeavesThePattern(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Publish(ctx, owner, missing); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Publish(ctx, owner, missing, store.PublicName{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("missing err = %v", err)
 	}
 
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	published := mustPattern(t, pool, created.ID)
 
-	if _, err := s.Publish(ctx, other, created.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Publish(ctx, other, created.ID, store.PublicName{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("foreign err = %v", err)
 	}
 	if row := mustPattern(t, pool, created.ID); row.id != patternID.String() || !patternDocumentEquals(t, pool, row.id, published.document) || row.isPublic != published.isPublic {
@@ -343,11 +343,11 @@ func TestPublishNotFoundLeavesThePattern(t *testing.T) {
 	if err := s.Delete(ctx, owner, created.ID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Publish(ctx, owner, created.ID); !errors.Is(err, store.ErrNotFound) {
+	if _, err := s.Publish(ctx, owner, created.ID, store.PublicName{}); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("deleted err = %v", err)
 	}
 	row := mustPattern(t, pool, created.ID)
-	if row.id != patternID.String() || row.isPublic != published.isPublic {
+	if row.id != patternID.String() || row.isPublic {
 		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
 	}
 	if !patternDocumentEquals(t, pool, row.id, published.document) {
@@ -386,7 +386,7 @@ func TestPublishSetsIsPublicTrue(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -439,7 +439,7 @@ func TestPublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 
 	errCh := make(chan error, 1)
 	go func() {
-		_, publishErr := s.Publish(ctx, owner, source.ID)
+		_, publishErr := s.Publish(ctx, owner, source.ID, store.PublicName{})
 		errCh <- publishErr
 	}()
 
@@ -516,7 +516,7 @@ func TestUnpublishSetsIsPublicFalse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -572,7 +572,7 @@ func TestUnpublishAgainKeepsUpdatedAt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +645,7 @@ func TestUnpublishNotFoundLeavesThePattern(t *testing.T) {
 		t.Fatalf("missing err = %v", err)
 	}
 
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,7 +668,7 @@ func TestUnpublishNotFoundLeavesThePattern(t *testing.T) {
 		t.Fatalf("deleted err = %v", err)
 	}
 	row = mustPattern(t, pool, created.ID)
-	if row.id != patternID.String() || !row.isPublic {
+	if row.id != patternID.String() || row.isPublic {
 		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
 	}
 	if !patternDocumentEquals(t, pool, row.id, published.document) {
@@ -693,7 +693,7 @@ func TestUnpublishEmptyDocumentHidesThePattern(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -750,7 +750,7 @@ func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, source.ID)
+	patternID, err := s.Publish(ctx, owner, source.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +814,7 @@ func TestPublishAfterUnpublishRefreshesTheDocument(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, created.ID)
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +848,7 @@ func TestPublishAfterUnpublishRefreshesTheDocument(t *testing.T) {
 		t.Fatal("pattern document changed")
 	}
 
-	again, err := s.Publish(ctx, owner, created.ID)
+	again, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -888,7 +888,7 @@ func TestUnpublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	patternID, err := s.Publish(ctx, owner, source.ID)
+	patternID, err := s.Publish(ctx, owner, source.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -967,7 +967,7 @@ func TestUnpublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 		t.Fatal("unpublish did not return")
 	}
 	row := mustPattern(t, pool, source.ID)
-	if row.id != patternID.String() || !row.isPublic {
+	if row.id != patternID.String() || row.isPublic {
 		t.Fatalf("id = %s, is_public = %v", row.id, row.isPublic)
 	}
 	if !patternDocumentEquals(t, pool, row.id, published.document) {

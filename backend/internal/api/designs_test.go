@@ -281,7 +281,7 @@ func TestCopyDesignRejectsABadID(t *testing.T) {
 
 func TestPublishDesignReturns200(t *testing.T) {
 	const want = `{"id":"00000000-0000-0000-0000-000000000000"}`
-	h := designHandler(t, nil, nil, nil, nil, nil, func(_ context.Context, _ store.UserID, id store.DesignID) (store.PatternID, error) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(_ context.Context, _ store.UserID, id store.DesignID, _ store.PublicName) (store.PatternID, error) {
 		if id.String() != designID {
 			t.Fatalf("id = %s", id)
 		}
@@ -302,7 +302,7 @@ func TestPublishDesignReturns200(t *testing.T) {
 }
 
 func TestPublishDesignRejectsABody(t *testing.T) {
-	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 		t.Fatal("publish was called")
 		return store.PatternID{}, nil
 	}, nil)
@@ -316,14 +316,14 @@ func TestPublishDesignRejectsABody(t *testing.T) {
 }
 
 func TestPublishDesignReturns404WhenMissing(t *testing.T) {
-	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 		return store.PatternID{}, store.ErrNotFound
 	}, nil)
 	assertNotFound(t, callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", ""))
 }
 
 func TestPublishDesignRejectsABadID(t *testing.T) {
-	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 		t.Fatal("publish was called")
 		return store.PatternID{}, nil
 	}, nil)
@@ -331,7 +331,7 @@ func TestPublishDesignRejectsABadID(t *testing.T) {
 }
 
 func TestPublishDesignReturnsEmptyDesign(t *testing.T) {
-	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 		return store.PatternID{}, store.ErrEmptyDesign
 	}, nil)
 	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", "")
@@ -401,7 +401,7 @@ func designHandler(
 	list func(context.Context, store.UserID) ([]store.DesignSummary, error),
 	del func(context.Context, store.UserID, store.DesignID) error,
 	copy func(context.Context, store.UserID, store.DesignID) (store.Design, error),
-	publish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
+	publish func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error),
 	unpublish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
 ) http.Handler {
 	t.Helper()
@@ -416,7 +416,7 @@ func designHandlerWithLog(
 	list func(context.Context, store.UserID) ([]store.DesignSummary, error),
 	del func(context.Context, store.UserID, store.DesignID) error,
 	copy func(context.Context, store.UserID, store.DesignID) (store.Design, error),
-	publish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
+	publish func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error),
 	unpublish func(context.Context, store.UserID, store.DesignID) (store.PatternID, error),
 ) http.Handler {
 	t.Helper()
@@ -455,7 +455,7 @@ func designHandlerWithLog(
 		}
 	}
 	if publish == nil {
-		publish = func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		publish = func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			t.Fatal("publish was called")
 			return store.PatternID{}, nil
 		}
@@ -467,25 +467,28 @@ func designHandlerWithLog(
 		}
 	}
 	h, err := New(Deps{
-		Log:            slog.New(slog.NewTextHandler(w, nil)),
-		Authenticate:   okAuth,
-		EnsureUser:     okEnsure,
-		DisplayName:    okName,
-		Save:           save,
-		Get:            get,
-		List:           list,
-		Delete:         del,
-		Copy:           copy,
-		Publish:        publish,
-		Unpublish:      unpublish,
-		CreateMaterial: idleCreateMaterial,
-		ListMaterials:  idleListMaterials,
-		UpdateMaterial: idleUpdateMaterial,
-		DeleteMaterial: idleDeleteMaterial,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		Log:                slog.New(slog.NewTextHandler(w, nil)),
+		Authenticate:       okAuth,
+		EnsureUser:         okEnsure,
+		DisplayName:        okName,
+		Save:               save,
+		Get:                get,
+		List:               list,
+		Delete:             del,
+		Copy:               copy,
+		Publish:            publish,
+		Unpublish:          unpublish,
+		CreateMaterial:     idleCreateMaterial,
+		ListMaterials:      idleListMaterials,
+		UpdateMaterial:     idleUpdateMaterial,
+		DeleteMaterial:     idleDeleteMaterial,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -30,6 +30,7 @@ type exchange struct {
 	auth           func(*http.Request) (store.ClerkUserID, error)
 	ensure         func(context.Context, store.ClerkUserID) (store.UserID, error)
 	display        func(context.Context, store.ClerkUserID) (string, error)
+	publicName     func(context.Context, store.ClerkUserID) (store.PublicName, error)
 	path           string
 	body           string
 	validRequest   bool
@@ -39,8 +40,10 @@ type exchange struct {
 	list           func(context.Context, store.UserID) ([]store.DesignSummary, error)
 	delete         func(context.Context, store.UserID, store.DesignID) error
 	copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	publish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	publish        func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error)
 	unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	listPatterns   func(context.Context) ([]store.PatternSummary, error)
+	getPattern     func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
 	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -193,7 +196,7 @@ var exchanges = map[string][]exchange{
 			validRequest: true,
 			status:       http.StatusOK,
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
-			publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 				return store.PatternID{}, nil
 			},
 		},
@@ -211,8 +214,18 @@ var exchanges = map[string][]exchange{
 			validRequest: true,
 			status:       http.StatusBadRequest,
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
-			publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 				return store.PatternID{}, store.ErrEmptyDesign
+			},
+		},
+		{
+			name:         "clerk down",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
+			validRequest: true,
+			status:       http.StatusInternalServerError,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			publicName: func(context.Context, store.ClerkUserID) (store.PublicName, error) {
+				return store.PublicName{}, errProbe
 			},
 		},
 	},
@@ -250,6 +263,64 @@ var exchanges = map[string][]exchange{
 			auth: func(*http.Request) (store.ClerkUserID, error) {
 				return store.ClerkUserID{}, errProbe
 			},
+		},
+	},
+	"listPatterns": {
+		{
+			name:         "named and unnamed",
+			path:         "/v1/patterns",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			listPatterns: func(context.Context) ([]store.PatternSummary, error) {
+				return []store.PatternSummary{
+					samplePattern(store.ParsePublicName("Ada Lovelace", sessionClerk)).PatternSummary,
+					samplePattern(store.PublicName{}).PatternSummary,
+				}, nil
+			},
+		},
+		{
+			name:         "empty",
+			path:         "/v1/patterns",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			listPatterns: func(context.Context) ([]store.PatternSummary, error) {
+				return []store.PatternSummary{}, nil
+			},
+		},
+		{
+			name:   "no session",
+			path:   "/v1/patterns",
+			status: http.StatusUnauthorized,
+		},
+	},
+	"getPattern": {
+		{
+			name:         "found",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			getPattern: func(context.Context, store.UserID, store.PatternID) (store.Pattern, error) {
+				return samplePattern(store.ParsePublicName("Ada Lovelace", sessionClerk)), nil
+			},
+		},
+		{
+			name:         "hidden",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa",
+			validRequest: true,
+			status:       http.StatusNotFound,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			getPattern: func(context.Context, store.UserID, store.PatternID) (store.Pattern, error) {
+				return store.Pattern{}, store.ErrPatternNotFound
+			},
+		},
+		{
+			name:   "malformed id",
+			path:   "/v1/patterns/not-a-uuid",
+			status: http.StatusNotFound,
+			auth:   func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
 		},
 	},
 	"createMaterial": {{
@@ -351,6 +422,26 @@ func sampleDesign(version int32) store.Design {
 			Version:     version,
 			UpdatedAt:   time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
 		},
+	}
+}
+
+func samplePattern(publisher store.PublicName) store.Pattern {
+	id, err := store.ParsePatternID("00000000-0000-4000-8000-0000000000aa")
+	if err != nil {
+		panic(err)
+	}
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		panic(err)
+	}
+	return store.Pattern{
+		PatternSummary: store.PatternSummary{
+			ID:          id,
+			Name:        name,
+			Publisher:   publisher,
+			PublishedAt: time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC),
+		},
+		Public: true,
 	}
 }
 
@@ -600,6 +691,24 @@ func newStack(t *testing.T, c exchange) http.Handler {
 	if display == nil {
 		display = func(context.Context, store.ClerkUserID) (string, error) { return "Ada", nil }
 	}
+	publicName := c.publicName
+	if publicName == nil {
+		publicName = func(context.Context, store.ClerkUserID) (store.PublicName, error) {
+			return store.PublicName{}, nil
+		}
+	}
+	listPatterns := c.listPatterns
+	if listPatterns == nil {
+		listPatterns = func(context.Context) ([]store.PatternSummary, error) {
+			return []store.PatternSummary{}, nil
+		}
+	}
+	getPattern := c.getPattern
+	if getPattern == nil {
+		getPattern = func(context.Context, store.UserID, store.PatternID) (store.Pattern, error) {
+			return store.Pattern{}, store.ErrPatternNotFound
+		}
+	}
 	save := c.save
 	if save == nil {
 		save = func(context.Context, store.UserID, store.Draft) (store.Design, error) {
@@ -632,7 +741,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 	}
 	publishDesign := c.publish
 	if publishDesign == nil {
-		publishDesign = func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		publishDesign = func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			return store.PatternID{}, store.ErrNotFound
 		}
 	}
@@ -695,25 +804,28 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
 	}
 	v1, err := api.New(api.Deps{
-		Log:            log,
-		Authenticate:   auth,
-		EnsureUser:     ensure,
-		DisplayName:    display,
-		Save:           save,
-		Get:            get,
-		List:           list,
-		Delete:         deleteDesign,
-		Copy:           copyDesign,
-		Publish:        publishDesign,
-		Unpublish:      unpublishDesign,
-		CreateMaterial: createMaterial,
-		ListMaterials:  listMaterials,
-		UpdateMaterial: updateMaterial,
-		DeleteMaterial: deleteMaterial,
-		CreatePrice:    createPrice,
-		ListPrices:     listPrices,
-		UpdatePrice:    updatePrice,
-		DeletePrice:    deletePrice,
+		Log:                log,
+		Authenticate:       auth,
+		EnsureUser:         ensure,
+		DisplayName:        display,
+		PublicName:         publicName,
+		Save:               save,
+		Get:                get,
+		List:               list,
+		Delete:             deleteDesign,
+		Copy:               copyDesign,
+		Publish:            publishDesign,
+		Unpublish:          unpublishDesign,
+		ListPublicPatterns: listPatterns,
+		GetPattern:         getPattern,
+		CreateMaterial:     createMaterial,
+		ListMaterials:      listMaterials,
+		UpdateMaterial:     updateMaterial,
+		DeleteMaterial:     deleteMaterial,
+		CreatePrice:        createPrice,
+		ListPrices:         listPrices,
+		UpdatePrice:        updatePrice,
+		DeletePrice:        deletePrice,
 	})
 	if err != nil {
 		t.Fatal(err)

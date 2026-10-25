@@ -6,9 +6,10 @@ INSERT INTO patterns (
     description,
     schema_version,
     document,
-    is_public
+    is_public,
+    publisher_name
 )
-SELECT d.id, d.owner_id, d.name, d.description, d.schema_version, d.document, true
+SELECT d.id, d.owner_id, d.name, d.description, d.schema_version, d.document, true, sqlc.narg('publisher_name')::text
 FROM designs d
 WHERE d.id = sqlc.arg('id')
   AND d.owner_id = sqlc.arg('owner_id')
@@ -19,6 +20,7 @@ SET name = excluded.name,
     schema_version = excluded.schema_version,
     document = excluded.document,
     is_public = true,
+    publisher_name = excluded.publisher_name,
     updated_at = now()
 RETURNING id;
 
@@ -27,3 +29,24 @@ UPDATE patterns
 SET is_public = false
 WHERE source_design_id = sqlc.arg('source_design_id')
 RETURNING id;
+
+-- name: ListPublicPatterns :many
+SELECT id, name, description, publisher_name, updated_at
+FROM patterns
+WHERE is_public
+ORDER BY updated_at DESC, id;
+
+-- name: GetVisiblePattern :one
+SELECT p.id, p.name, p.description, p.publisher_name, p.updated_at,
+       p.is_public, p.schema_version, p.document,
+       ARRAY(
+           SELECT m.id FROM materials m
+           WHERE m.owner_id IS NULL
+             AND m.id IN (
+                 SELECT (piece->>'materialId')::uuid
+                 FROM jsonb_array_elements(p.document->'pieces') AS piece
+             )
+       )::uuid[] AS system_material_ids
+FROM patterns p
+WHERE p.id = sqlc.arg('id')
+  AND pattern_visible(p.is_public, p.publisher_id, sqlc.arg('viewer_id'));

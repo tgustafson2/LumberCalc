@@ -7,9 +7,101 @@ package q
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const getVisiblePattern = `-- name: GetVisiblePattern :one
+SELECT p.id, p.name, p.description, p.publisher_name, p.updated_at,
+       p.is_public, p.schema_version, p.document,
+       ARRAY(
+           SELECT m.id FROM materials m
+           WHERE m.owner_id IS NULL
+             AND m.id IN (
+                 SELECT (piece->>'materialId')::uuid
+                 FROM jsonb_array_elements(p.document->'pieces') AS piece
+             )
+       )::uuid[] AS system_material_ids
+FROM patterns p
+WHERE p.id = $1
+  AND pattern_visible(p.is_public, p.publisher_id, $2)
+`
+
+type GetVisiblePatternParams struct {
+	ID       pgtype.UUID
+	ViewerID pgtype.UUID
+}
+
+type GetVisiblePatternRow struct {
+	ID                pgtype.UUID
+	Name              string
+	Description       string
+	PublisherName     pgtype.Text
+	UpdatedAt         pgtype.Timestamptz
+	IsPublic          bool
+	SchemaVersion     int32
+	Document          json.RawMessage
+	SystemMaterialIds []pgtype.UUID
+}
+
+func (q *Queries) GetVisiblePattern(ctx context.Context, arg GetVisiblePatternParams) (GetVisiblePatternRow, error) {
+	row := q.db.QueryRow(ctx, getVisiblePattern, arg.ID, arg.ViewerID)
+	var i GetVisiblePatternRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.PublisherName,
+		&i.UpdatedAt,
+		&i.IsPublic,
+		&i.SchemaVersion,
+		&i.Document,
+		&i.SystemMaterialIds,
+	)
+	return i, err
+}
+
+const listPublicPatterns = `-- name: ListPublicPatterns :many
+SELECT id, name, description, publisher_name, updated_at
+FROM patterns
+WHERE is_public
+ORDER BY updated_at DESC, id
+`
+
+type ListPublicPatternsRow struct {
+	ID            pgtype.UUID
+	Name          string
+	Description   string
+	PublisherName pgtype.Text
+	UpdatedAt     pgtype.Timestamptz
+}
+
+func (q *Queries) ListPublicPatterns(ctx context.Context) ([]ListPublicPatternsRow, error) {
+	rows, err := q.db.Query(ctx, listPublicPatterns)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublicPatternsRow
+	for rows.Next() {
+		var i ListPublicPatternsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.PublisherName,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
 
 const setPatternPrivate = `-- name: SetPatternPrivate :one
 UPDATE patterns
@@ -33,12 +125,13 @@ INSERT INTO patterns (
     description,
     schema_version,
     document,
-    is_public
+    is_public,
+    publisher_name
 )
-SELECT d.id, d.owner_id, d.name, d.description, d.schema_version, d.document, true
+SELECT d.id, d.owner_id, d.name, d.description, d.schema_version, d.document, true, $1::text
 FROM designs d
-WHERE d.id = $1
-  AND d.owner_id = $2
+WHERE d.id = $2
+  AND d.owner_id = $3
   AND d.deleted_at IS NULL
 ON CONFLICT (source_design_id) DO UPDATE
 SET name = excluded.name,
@@ -46,17 +139,19 @@ SET name = excluded.name,
     schema_version = excluded.schema_version,
     document = excluded.document,
     is_public = true,
+    publisher_name = excluded.publisher_name,
     updated_at = now()
 RETURNING id
 `
 
 type UpsertPatternFromDesignParams struct {
-	ID      pgtype.UUID
-	OwnerID pgtype.UUID
+	PublisherName pgtype.Text
+	ID            pgtype.UUID
+	OwnerID       pgtype.UUID
 }
 
 func (q *Queries) UpsertPatternFromDesign(ctx context.Context, arg UpsertPatternFromDesignParams) (pgtype.UUID, error) {
-	row := q.db.QueryRow(ctx, upsertPatternFromDesign, arg.ID, arg.OwnerID)
+	row := q.db.QueryRow(ctx, upsertPatternFromDesign, arg.PublisherName, arg.ID, arg.OwnerID)
 	var id pgtype.UUID
 	err := row.Scan(&id)
 	return id, err

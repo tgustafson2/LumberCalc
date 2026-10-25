@@ -140,6 +140,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/patterns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listPatterns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/patterns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get: operations["getPattern"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/materials": {
         parameters: {
             query?: never;
@@ -274,6 +308,50 @@ export interface components {
         PublishedPattern: {
             /** Format: uuid */
             id: string;
+        };
+        PatternSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** @description The publisher name stored at the last publish. Null when no safe name was stored. */
+            publisherName: string | null;
+            /** Format: date-time */
+            publishedAt: string;
+        };
+        Pattern: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            description: string;
+            /** @description The publisher name stored at the last publish. Null when no safe name was stored. */
+            publisherName: string | null;
+            /** Format: date-time */
+            publishedAt: string;
+            /** @description False only when the caller is the publisher and the pattern is private. */
+            isPublic: boolean;
+            document: components["schemas"]["PatternDocument"];
+        };
+        /** @description The published design document. A piece keeps materialId only when it is a system material. Any other materialId is null. */
+        PatternDocument: {
+            /** @enum {integer} */
+            schemaVersion: 1;
+            /** @enum {string} */
+            units: "in";
+            pieces: components["schemas"]["PatternPiece"][];
+            connections: components["schemas"]["DesignConnection"][];
+        };
+        PatternPiece: {
+            id: components["schemas"]["DocumentUuid"];
+            name: string;
+            /** Format: uuid */
+            materialId: string | null;
+            /** @default false */
+            roughCut: boolean;
+            /** @description Exact inch length. The numeric value stays exact. An exponent form can come back as a plain decimal. */
+            lengthIn: number;
+            continuity: components["schemas"]["DesignContinuity"];
+            transform: components["schemas"]["DesignTransform"];
         };
         /** @description A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees. */
         DesignDocument: {
@@ -940,6 +1018,95 @@ export interface operations {
                 };
             };
             /** @description The design was not unpublished. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPatterns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every public pattern, newest publishedAt first, then id ascending. The list is the same for every caller. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatternSummary"][];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The patterns were not loaded. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getPattern: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A public pattern, or a private pattern read by its publisher. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Pattern"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The id is not a uuid, no pattern has this id, or the pattern is private and the caller is not its publisher. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The pattern was not loaded. */
             500: {
                 headers: {
                     [name: string]: unknown;

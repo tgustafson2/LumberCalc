@@ -67,10 +67,11 @@ type Pattern struct {
 	Name           string
 	Description    string
 	SchemaVersion  int32
-	Document       []byte
+	Document       json.RawMessage
 	IsPublic       bool
 	CreatedAt      pgtype.Timestamptz
 	UpdatedAt      pgtype.Timestamptz
+	PublisherName  pgtype.Text
 }
 
 type Price struct {
