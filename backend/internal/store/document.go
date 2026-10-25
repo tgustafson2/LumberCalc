@@ -77,6 +77,8 @@ func (d *Document) UnmarshalJSON(raw []byte) error {
 
 func (d Document) schemaVersion() int32 { return 1 }
 
+func (d Document) empty() bool { return len(d.pieces) == 0 }
+
 // materialIDs returns each piece material id once, in first-seen order.
 func (d Document) materialIDs() []MaterialID {
 	ids := make([]MaterialID, 0, len(d.pieces))

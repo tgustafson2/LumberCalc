@@ -31,6 +31,10 @@ func ParseDesignID(raw string) (DesignID, error) {
 
 func (id DesignID) String() string { return formatUUID(id.v) }
 
+type PatternID struct{ v [16]byte }
+
+func (id PatternID) String() string { return formatUUID(id.v) }
+
 type Name struct{ s string }
 
 // ParseName rejects a blank name.
@@ -83,6 +87,7 @@ var (
 	ErrBadDesignID = errors.New("design id is not a uuid")
 	ErrBlankName   = errors.New("design name is blank")
 	ErrStale       = errors.New("stale version")
+	ErrEmptyDesign = errors.New("empty design")
 )
 
 func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, error) {
@@ -197,6 +202,45 @@ func (s *Store) Delete(ctx context.Context, owner UserID, id DesignID) error {
 		return ErrNotFound
 	}
 	return nil
+}
+
+func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID) (PatternID, error) {
+	var patternID PatternID
+	err := s.withTx(ctx, func(qtx *q.Queries) error {
+		locked, err := qtx.LockLiveDesign(ctx, q.LockLiveDesignParams{
+			ID:      uuidPG(id.v),
+			OwnerID: uuidPG(owner.v),
+		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrNotFound
+		}
+		if err != nil {
+			return err
+		}
+		design, err := designFromRow(locked)
+		if err != nil {
+			return err
+		}
+		if design.Document.empty() {
+			return ErrEmptyDesign
+		}
+		raw, err := qtx.UpsertPatternFromDesign(ctx, q.UpsertPatternFromDesignParams{
+			ID:      locked.ID,
+			OwnerID: locked.OwnerID,
+		})
+		if err != nil {
+			return err
+		}
+		if !raw.Valid {
+			return errors.New("pattern row is missing id")
+		}
+		patternID = PatternID{v: raw.Bytes}
+		return nil
+	})
+	if err != nil {
+		return PatternID{}, err
+	}
+	return patternID, nil
 }
 
 // Copy deep-clones one live design that this owner still has.
