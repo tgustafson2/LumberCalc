@@ -14,6 +14,8 @@ import (
 
 const staleVersionMessage = "stale version"
 
+const emptyDesignToken = "empty_design"
+
 type designEnvelope struct {
 	Name        json.RawMessage `json:"name"`
 	Description json.RawMessage `json:"description"`
@@ -117,7 +119,7 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	if err := rejectCopyBody(r.Body); err != nil {
+	if err := rejectRequestBody(r.Body); err != nil {
 		a.writeDesignErr(w, r, err)
 		return
 	}
@@ -130,7 +132,25 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	server.WriteJSON(w, http.StatusCreated, toDesign(design))
 }
 
-func rejectCopyBody(body io.Reader) error {
+func (a *API) publishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
+	id, err := store.ParseDesignID(r.PathValue("id"))
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	if err := rejectRequestBody(r.Body); err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	patternID, err := a.d.Publish(r.Context(), c.UserID(), id)
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	server.WriteJSON(w, http.StatusOK, PublishedPattern{Id: patternID.String()})
+}
+
+func rejectRequestBody(body io.Reader) error {
 	raw, err := io.ReadAll(io.LimitReader(body, maxBody+1))
 	if err != nil {
 		return err
@@ -233,6 +253,8 @@ func integerToken(token []byte) bool {
 func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) {
 	a.d.Log.ErrorContext(r.Context(), "design", "err", err)
 	switch {
+	case errors.Is(err, store.ErrEmptyDesign):
+		server.WriteJSON(w, http.StatusBadRequest, server.Error{Error: emptyDesignToken})
 	case errors.Is(err, store.ErrStale):
 		server.WriteJSON(w, http.StatusConflict, server.Error{Error: staleVersionMessage})
 	case errors.Is(err, store.ErrMaterialUnusable):
@@ -247,7 +269,7 @@ func designStatus(err error) int {
 	switch {
 	case errors.Is(err, store.ErrBadDesignID), errors.Is(err, store.ErrNotFound):
 		return http.StatusNotFound
-	case errors.Is(err, store.ErrBlankName), errors.Is(err, errBadBody), errors.As(err, &docErr):
+	case errors.Is(err, store.ErrBlankName), errors.Is(err, errBadBody), errors.Is(err, store.ErrEmptyDesign), errors.As(err, &docErr):
 		return http.StatusBadRequest
 	case errors.Is(err, store.ErrStale), errors.Is(err, store.ErrMaterialUnusable):
 		return http.StatusConflict

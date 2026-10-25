@@ -104,6 +104,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/designs/{id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publishDesign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/materials": {
         parameters: {
             query?: never;
@@ -234,6 +252,10 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             document: components["schemas"]["DesignDocument"];
+        };
+        PublishedPattern: {
+            /** Format: uuid */
+            id: string;
         };
         /** @description A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees. */
         DesignDocument: {
@@ -782,6 +804,65 @@ export interface operations {
                 };
             };
             /** @description The design was not copied. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The design was published. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedPattern"];
+                };
+            };
+            /** @description The request has a body, or the design has zero pieces. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such design. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The design was not published. */
             500: {
                 headers: {
                     [name: string]: unknown;

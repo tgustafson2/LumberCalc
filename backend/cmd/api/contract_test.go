@@ -39,6 +39,7 @@ type exchange struct {
 	list           func(context.Context, store.UserID) ([]store.DesignSummary, error)
 	delete         func(context.Context, store.UserID, store.DesignID) error
 	copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	publish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
 	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -182,6 +183,36 @@ var exchanges = map[string][]exchange{
 			validRequest: false,
 			status:       http.StatusBadRequest,
 			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+	},
+	"publishDesign": {
+		{
+			name:         "published",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+				return store.PatternID{}, nil
+			},
+		},
+		{
+			name:         "body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
+			body:         `{}`,
+			validRequest: false,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:         "empty",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
+			validRequest: true,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+				return store.PatternID{}, store.ErrEmptyDesign
+			},
 		},
 	},
 	"createMaterial": {{
@@ -562,6 +593,12 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.Design{}, store.ErrNotFound
 		}
 	}
+	publishDesign := c.publish
+	if publishDesign == nil {
+		publishDesign = func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+			return store.PatternID{}, store.ErrNotFound
+		}
+	}
 	createMaterial := c.createMaterial
 	if createMaterial == nil {
 		createMaterial = func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
@@ -624,6 +661,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		List:           list,
 		Delete:         deleteDesign,
 		Copy:           copyDesign,
+		Publish:        publishDesign,
 		CreateMaterial: createMaterial,
 		ListMaterials:  listMaterials,
 		UpdateMaterial: updateMaterial,
