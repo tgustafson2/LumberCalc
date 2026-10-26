@@ -201,7 +201,6 @@ func (s *Store) Delete(ctx context.Context, owner UserID, id DesignID) error {
 	return nil
 }
 
-// Publish refreshes the name, the document, and updated_at on a second call, and keeps the pattern id.
 func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID, publisher PublicName) (PatternID, error) {
 	var patternID PatternID
 	err := s.withTx(ctx, func(qtx *q.Queries) error {
