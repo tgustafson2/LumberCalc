@@ -804,7 +804,6 @@ func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
 	pine := insertSystemMaterial(t, pool, "test pine")
-	oak := insertSystemMaterial(t, pool, "test oak")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -820,28 +819,9 @@ func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneName, err := store.ParseName("Stool")
+	clone, err := s.AddPattern(ctx, owner, patternID)
 	if err != nil {
 		t.Fatal(err)
-	}
-	clone, err := s.Save(ctx, owner, store.CreateDraft{
-		Name:        cloneName,
-		Description: "kept",
-		Document:    testDocument(t, oak),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tag, err := pool.Exec(ctx, `
-		UPDATE designs
-		SET copied_from_pattern_id = $2
-		WHERE id = $1 AND copied_from_design_id IS NULL
-	`, clone.ID.String(), patternID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tag.RowsAffected() != 1 {
-		t.Fatalf("updated rows = %d", tag.RowsAffected())
 	}
 	beforeID, beforeDocument, beforeUpdated := readCopyColumns(t, pool, clone.ID)
 

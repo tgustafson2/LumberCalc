@@ -92,6 +92,36 @@ func (s *Store) GetPattern(ctx context.Context, viewer UserID, id PatternID) (Pa
 	return patternFromRow(row)
 }
 
+// AddPattern clones the stored snapshot of one public pattern into a new design that owner owns.
+// A malformed id, a missing pattern, and a private pattern are ErrPatternNotFound. This includes the publisher.
+// The clone has the snapshot name and description, new piece and connection ids, and version 1.
+// A second call inserts another design.
+// A snapshot material that owner cannot use is ErrMaterialUnusable. Then no design is inserted.
+// No price row is written. Later publish or unpublish does not change the clone.
+func (s *Store) AddPattern(ctx context.Context, owner UserID, id PatternID) (Design, error) {
+	var row q.Design
+	err := s.withTx(ctx, func(qtx *q.Queries) error {
+		snap, err := qtx.LockPublicPattern(ctx, uuidPG(id.v))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrPatternNotFound
+		}
+		if err != nil {
+			return err
+		}
+		doc, err := parseStored("pattern", snap.Document, snap.SchemaVersion)
+		if err != nil {
+			return err
+		}
+		// patterns.name has the same btrim check as designs.name.
+		row, err = insertClone(ctx, qtx, owner, Name{s: snap.Name}, snap.Description, doc, fromPattern(id))
+		return err
+	})
+	if err != nil {
+		return Design{}, err
+	}
+	return designFromRow(row)
+}
+
 func patternFromRow(row q.GetVisiblePatternRow) (Pattern, error) {
 	summary, err := patternSummaryFromRow(row.ID, row.Name, row.Description, row.PublisherName, row.UpdatedAt)
 	if err != nil {

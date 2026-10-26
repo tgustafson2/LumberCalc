@@ -503,6 +503,7 @@ func designHandlerWithLog(
 		PublicName:         idlePublicName,
 		ListPublicPatterns: idleListPublicPatterns,
 		GetPattern:         idleGetPattern,
+		AddPattern:         idleAddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)

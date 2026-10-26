@@ -42,6 +42,7 @@ type Deps struct {
 	Unpublish          func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
 	ListPublicPatterns func(context.Context) ([]store.PatternSummary, error)
 	GetPattern         func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
+	AddPattern         func(context.Context, store.UserID, store.PatternID) (store.Design, error)
 	CreateMaterial     func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	ListMaterials      func(context.Context, store.UserID) ([]store.Material, error)
 	UpdateMaterial     func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -108,6 +109,9 @@ func New(d Deps) (http.Handler, error) {
 	if d.GetPattern == nil {
 		return nil, errors.New("get pattern is required")
 	}
+	if d.AddPattern == nil {
+		return nil, errors.New("add pattern is required")
+	}
 	if d.CreateMaterial == nil {
 		return nil, errors.New("create material is required")
 	}
@@ -144,6 +148,7 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("POST /v1/designs/{id}/unpublish", a.unpublishDesign)
 	a.handle("GET /v1/patterns", a.listPatterns)
 	a.handle("GET /v1/patterns/{id}", a.getPattern)
+	a.handle("POST /v1/patterns/{id}/add", a.addPattern)
 	a.handle("POST /v1/materials", a.createMaterial)
 	a.handle("GET /v1/materials", a.listMaterials)
 	a.handle("PUT /v1/materials/{id}", a.replaceMaterial)

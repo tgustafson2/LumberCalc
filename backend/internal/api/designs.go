@@ -49,8 +49,7 @@ func (a *API) createDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	w.Header().Set("Location", "/v1/designs/"+design.ID.String())
-	server.WriteJSON(w, http.StatusCreated, toDesign(design))
+	writeCreatedDesign(w, design)
 }
 
 func (a *API) listDesigns(w http.ResponseWriter, r *http.Request, c Caller) {
@@ -130,8 +129,14 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	w.Header().Set("Location", "/v1/designs/"+design.ID.String())
-	server.WriteJSON(w, http.StatusCreated, toDesign(design))
+	writeCreatedDesign(w, design)
+}
+
+// writeCreatedDesign is the one 201 response for a new design.
+// Location is the path of that design.
+func writeCreatedDesign(w http.ResponseWriter, d store.Design) {
+	w.Header().Set("Location", "/v1/designs/"+d.ID.String())
+	server.WriteJSON(w, http.StatusCreated, toDesign(d))
 }
 
 func (a *API) publishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
@@ -294,7 +299,7 @@ func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) 
 func designStatus(err error) int {
 	var docErr *store.DocumentError
 	switch {
-	case errors.Is(err, store.ErrBadDesignID), errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, store.ErrBadDesignID), errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrPatternNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, store.ErrBlankName), errors.Is(err, errBadBody), errors.Is(err, store.ErrEmptyDesign), errors.As(err, &docErr):
 		return http.StatusBadRequest

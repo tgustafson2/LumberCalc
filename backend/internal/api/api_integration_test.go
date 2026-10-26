@@ -46,6 +46,7 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -102,6 +103,7 @@ func TestGetMaterialsReturnsTheSystemCatalog(t *testing.T) {
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -228,6 +230,7 @@ func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -412,6 +415,7 @@ func TestUnpublishThenPublishKeepsThePatternID(t *testing.T) {
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -484,4 +488,106 @@ func TestUnpublishThenPublishKeepsThePatternID(t *testing.T) {
 	if got := readPatternID(republished); got != patternID {
 		t.Fatalf("id = %s, want %s", got, patternID)
 	}
+}
+
+func TestAddPatternThenGetTheDesign(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	st := store.New(pool)
+	const (
+		publisherClerk = "user_add_publisher"
+		adderClerk     = "user_add_adder"
+	)
+	clerk := publisherClerk
+	h, err := New(Deps{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: func(*http.Request) (store.ClerkUserID, error) {
+			return mustClerk(t, clerk), nil
+		},
+		EnsureUser: st.EnsureUser,
+		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
+			return "Ada", nil
+		},
+		Save:               st.Save,
+		Get:                st.Get,
+		List:               st.List,
+		Delete:             st.Delete,
+		Copy:               st.Copy,
+		Publish:            st.Publish,
+		Unpublish:          st.Unpublish,
+		CreateMaterial:     st.CreateMaterial,
+		ListMaterials:      st.ListMaterials,
+		UpdateMaterial:     st.UpdateMaterial,
+		DeleteMaterial:     st.DeleteMaterial,
+		CreatePrice:        st.CreatePrice,
+		ListPrices:         st.ListPrices,
+		UpdatePrice:        st.UpdatePrice,
+		DeletePrice:        st.DeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: st.ListPublicPatterns,
+		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listed := call(h, http.MethodGet, "/v1/materials", "Bearer token")
+	if listed.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", listed.Code, listed.Body.String())
+	}
+	var catalog []Material
+	if err := json.Unmarshal(listed.Body.Bytes(), &catalog); err != nil {
+		t.Fatal(err)
+	}
+	if len(catalog) == 0 || !catalog[0].System {
+		t.Fatal("catalog has no system material")
+	}
+	const pieceID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	body := `{"name":"Bench","description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[{"id":"` + pieceID + `","name":"stud","materialId":"` + catalog[0].Id + `","roughCut":false,"lengthIn":8,"continuity":{"x":true,"y":false,"z":false},"transform":{"positionIn":[0,0,0],"rotationDeg":[0,0,0]}}],"connections":[]}}`
+	created := callJSON(h, http.MethodPost, "/v1/designs", body)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", created.Code, created.Body.String())
+	}
+	var source Design
+	if err := json.Unmarshal(created.Body.Bytes(), &source); err != nil {
+		t.Fatal(err)
+	}
+	published := callJSON(h, http.MethodPost, "/v1/designs/"+source.Id+"/publish", "")
+	if published.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", published.Code, published.Body.String())
+	}
+	var pattern PublishedPattern
+	if err := json.Unmarshal(published.Body.Bytes(), &pattern); err != nil {
+		t.Fatal(err)
+	}
+
+	clerk = adderClerk
+	added := callJSON(h, http.MethodPost, "/v1/patterns/"+pattern.Id+"/add", "")
+	if added.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", added.Code, added.Body.String())
+	}
+	var clone Design
+	if err := json.Unmarshal(added.Body.Bytes(), &clone); err != nil {
+		t.Fatal(err)
+	}
+	if clone.Id == source.Id || clone.Name != "Bench" || clone.Description != "cut list" || clone.Version != 1 {
+		t.Fatalf("clone = %+v", clone)
+	}
+	if added.Header().Get("Location") != "/v1/designs/"+clone.Id {
+		t.Fatalf("Location = %q", added.Header().Get("Location"))
+	}
+
+	got := callJSON(h, http.MethodGet, "/v1/designs/"+clone.Id, "")
+	if got.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", got.Code, got.Body.String())
+	}
+	if strings.TrimSpace(got.Body.String()) != strings.TrimSpace(added.Body.String()) {
+		t.Fatalf("get body = %s, add body = %s", got.Body.String(), added.Body.String())
+	}
+	if strings.Contains(got.Body.String(), pieceID) || !strings.Contains(got.Body.String(), catalog[0].Id) {
+		t.Fatalf("document = %s", got.Body.String())
+	}
+
+	clerk = publisherClerk
+	assertNotFound(t, callJSON(h, http.MethodGet, "/v1/designs/"+clone.Id, ""))
 }

@@ -59,6 +59,7 @@ func run(ctx context.Context) error {
 		Unpublish:          st.Unpublish,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
 		CreateMaterial:     st.CreateMaterial,
 		ListMaterials:      st.ListMaterials,
 		UpdateMaterial:     st.UpdateMaterial,
