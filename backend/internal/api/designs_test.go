@@ -531,6 +531,7 @@ func designHandlerWithLog(
 		ListPrices:         idleListPrices,
 		UpdatePrice:        idleUpdatePrice,
 		DeletePrice:        idleDeletePrice,
+		GetOptimizeInput:   idleGetOptimizeInput(t),
 		PublicName:         idlePublicName,
 		ListPublicPatterns: idleListPublicPatterns,
 		GetPattern:         idleGetPattern,

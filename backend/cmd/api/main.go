@@ -68,6 +68,7 @@ func run(ctx context.Context) error {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 	})
 	if err != nil {
 		return err

@@ -235,6 +235,7 @@ func priceHandler(
 		ListPrices:         list,
 		UpdatePrice:        update,
 		DeletePrice:        del,
+		GetOptimizeInput:   idleGetOptimizeInput(t),
 		PublicName:         idlePublicName,
 		ListPublicPatterns: idleListPublicPatterns,
 		GetPattern:         idleGetPattern,

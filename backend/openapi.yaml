@@ -448,6 +448,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Error"
+  /v1/designs/{id}/optimize:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: optimizeDesign
+      tags: [v1]
+      description: >
+        Resolves the kerf and the dimension basis for the design.
+        An omitted axis uses the caller settings.
+        useKerf true requires kerfInches greater than zero.
+        useKerf false requires kerfInches omitted or null.
+        Kerf is the saw gap along the board.
+        Kerf is not applied to thickness or width.
+        This call does not write the design.
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OptimizeRequest"
+      responses:
+        "200":
+          description: The resolved kerf and dimension basis. kerfInches is null when the kerf is zero.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OptimizeFlags"
+        "400":
+          description: The body is not a flag overlay.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The caller has no such design.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The flags were not resolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
   /v1/patterns:
     get:
       operationId: listPatterns
@@ -1299,6 +1361,51 @@ components:
         path: encoding/json
         name: Number
       description: Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
+    DimensionBasis:
+      type: string
+      enum: [nominal, actual]
+    OptimizeRequest:
+      type: object
+      additionalProperties: false
+      description: >
+        An omitted axis uses the caller settings.
+        useKerf true requires kerfInches greater than zero.
+        useKerf false requires kerfInches omitted or null.
+      properties:
+        useKerf:
+          type: boolean
+        kerfInches:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+          x-go-type: json.Number
+          x-go-type-import:
+            path: encoding/json
+            name: Number
+          description: The saw gap along the board, in inches. Kerf is not applied to thickness or width.
+        dimensionBasis:
+          $ref: "#/components/schemas/DimensionBasis"
+    OptimizeFlags:
+      type: object
+      additionalProperties: false
+      required: [useKerf, kerfInches, dimensionBasis]
+      description: The resolved kerf and dimension basis. kerfInches is null when the kerf is zero.
+      properties:
+        useKerf:
+          type: boolean
+        kerfInches:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          nullable: true
+          x-go-type: json.Number
+          x-go-type-import:
+            path: encoding/json
+            name: Number
+          description: The saw gap along the board, in inches. Kerf is not applied to thickness or width. Null when the kerf is zero.
+        dimensionBasis:
+          $ref: "#/components/schemas/DimensionBasis"
     MaterialWrite:
       type: object
       additionalProperties: false

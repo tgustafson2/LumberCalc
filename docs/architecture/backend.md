@@ -20,11 +20,11 @@ The packages in `AGENTS.md` are the backend layers. Put new code in one of those
 
 `cmd/api` depends on `config`, `clerkauth`, `store`, `api`, `server`, and `db`.
 
-`api` depends on `clerkauth`, `server`, and `store`.
+`api` depends on `clerkauth`, `server`, `store`, and `solver`.
 
 `clerkauth` depends on `config` and `store`.
 
-`store` depends on `store/internal/q`.
+`store` depends on `store/internal/q` and `solver`.
 
 `config` and `server` do not import other LumberCalc packages.
 
@@ -46,6 +46,6 @@ Do not add Docker, Compose, Redis, Terraform, or AWS unless the task asks for th
 
 An empty design is a valid document. `POST /v1/designs` and `PUT /v1/designs/{id}` accept that document.
 
-`POST /v1/designs/{id}/optimize` returns HTTP 400 when the design has no pieces. The optimization run status is `failed`. The `error_code` is `empty_design`.
+`POST /v1/designs/{id}/optimize` resolves flags for an empty document. It does not return `empty_design` yet.
 
-When you add that operation, move these rules onto the operation. Delete this section in that same change.
+When runs are persisted, that operation returns HTTP 400 when the design has no pieces. The optimization run status is `failed`. The `error_code` is `empty_design`. Move those two rules onto the operation and delete this section in that change.

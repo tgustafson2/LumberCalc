@@ -21,38 +21,40 @@ import (
 	"lumbercalc/backend/internal/api"
 	"lumbercalc/backend/internal/clerkauth"
 	"lumbercalc/backend/internal/server"
+	"lumbercalc/backend/internal/solver"
 	"lumbercalc/backend/internal/store"
 )
 
 type exchange struct {
-	name           string
-	checks         []server.Check
-	auth           func(*http.Request) (store.ClerkUserID, error)
-	ensure         func(context.Context, store.ClerkUserID) (store.UserID, error)
-	display        func(context.Context, store.ClerkUserID) (string, error)
-	publicName     func(context.Context, store.ClerkUserID) (store.PublicName, error)
-	path           string
-	body           string
-	validRequest   bool
-	status         int
-	save           func(context.Context, store.UserID, store.Draft) (store.Design, error)
-	get            func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	list           func(context.Context, store.UserID) ([]store.DesignSummary, error)
-	delete         func(context.Context, store.UserID, store.DesignID) error
-	copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	publish        func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error)
-	unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
-	listPatterns   func(context.Context) ([]store.PatternSummary, error)
-	getPattern     func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
-	addPattern     func(context.Context, store.UserID, store.PatternID) (store.Design, error)
-	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
-	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
-	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
-	deleteMaterial func(context.Context, store.UserID, store.MaterialID) error
-	createPrice    func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
-	listPrices     func(context.Context, store.UserID) ([]store.Price, error)
-	updatePrice    func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
-	deletePrice    func(context.Context, store.UserID, store.PriceID) error
+	name             string
+	checks           []server.Check
+	auth             func(*http.Request) (store.ClerkUserID, error)
+	ensure           func(context.Context, store.ClerkUserID) (store.UserID, error)
+	display          func(context.Context, store.ClerkUserID) (string, error)
+	publicName       func(context.Context, store.ClerkUserID) (store.PublicName, error)
+	path             string
+	body             string
+	validRequest     bool
+	status           int
+	save             func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	get              func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	list             func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	delete           func(context.Context, store.UserID, store.DesignID) error
+	copy             func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	publish          func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error)
+	unpublish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	listPatterns     func(context.Context) ([]store.PatternSummary, error)
+	getPattern       func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
+	addPattern       func(context.Context, store.UserID, store.PatternID) (store.Design, error)
+	createMaterial   func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
+	listMaterials    func(context.Context, store.UserID) ([]store.Material, error)
+	updateMaterial   func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
+	deleteMaterial   func(context.Context, store.UserID, store.MaterialID) error
+	createPrice      func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
+	listPrices       func(context.Context, store.UserID) ([]store.Price, error)
+	updatePrice      func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
+	deletePrice      func(context.Context, store.UserID, store.PriceID) error
+	getOptimizeInput func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error)
 }
 
 var exchanges = map[string][]exchange{
@@ -276,6 +278,55 @@ var exchanges = map[string][]exchange{
 			},
 		},
 	},
+	"optimizeDesign": {
+		{
+			name:         "omitted body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/optimize",
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			getOptimizeInput: func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error) {
+				return store.OptimizeInput{Flags: resolvedFlags("", "nominal")}, nil
+			},
+		},
+		{
+			name:         "explicit body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/optimize",
+			body:         `{"useKerf":true,"kerfInches":0.125,"dimensionBasis":"actual"}`,
+			validRequest: true,
+			status:       http.StatusOK,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			getOptimizeInput: func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error) {
+				return store.OptimizeInput{Flags: resolvedFlags("0.125", "actual")}, nil
+			},
+		},
+		{
+			name:         "bad body",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/optimize",
+			body:         `{"nope":true}`,
+			validRequest: false,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:         "missing design",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/optimize",
+			validRequest: true,
+			status:       http.StatusNotFound,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			getOptimizeInput: func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error) {
+				return store.OptimizeInput{}, store.ErrNotFound
+			},
+		},
+		{
+			name:   "no session",
+			path:   "/v1/designs/00000000-0000-4000-8000-000000000001/optimize",
+			status: http.StatusUnauthorized,
+			auth: func(*http.Request) (store.ClerkUserID, error) {
+				return store.ClerkUserID{}, clerkauth.ErrUnauthenticated
+			},
+		},
+	},
 	"listPatterns": {
 		{
 			name:         "named and unnamed",
@@ -456,6 +507,26 @@ var exchanges = map[string][]exchange{
 			return nil
 		},
 	}},
+}
+
+func resolvedFlags(kerf, basis string) store.OptimizeFlags {
+	var length solver.Length
+	if kerf != "" {
+		parsed, err := solver.ParseLength(kerf)
+		if err != nil {
+			panic(err)
+		}
+		length = parsed
+	}
+	parsedBasis, err := store.ParseDimensionBasis(basis)
+	if err != nil {
+		panic(err)
+	}
+	flags, err := store.NewOptimizeFlags(length, parsedBasis)
+	if err != nil {
+		panic(err)
+	}
+	return flags
 }
 
 func sampleDesign(version int32) store.Design {
@@ -858,6 +929,13 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.ErrPriceNotFound
 		}
 	}
+	getOptimizeInput := c.getOptimizeInput
+	if getOptimizeInput == nil {
+		getOptimizeInput = func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error) {
+			t.Fatal("get optimize input was called")
+			return store.OptimizeInput{}, nil
+		}
+	}
 	checks := c.checks
 	if len(checks) == 0 {
 		checks = []server.Check{{Name: "postgres", Probe: func(context.Context) error { return nil }}}
@@ -886,6 +964,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		ListPrices:         listPrices,
 		UpdatePrice:        updatePrice,
 		DeletePrice:        deletePrice,
+		GetOptimizeInput:   getOptimizeInput,
 	})
 	if err != nil {
 		t.Fatal(err)

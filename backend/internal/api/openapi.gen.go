@@ -14,6 +14,24 @@ const (
 	BearerScopes bearerContextKey = "bearer.Scopes"
 )
 
+// Defines values for DimensionBasis.
+const (
+	DimensionBasisActual  DimensionBasis = "actual"
+	DimensionBasisNominal DimensionBasis = "nominal"
+)
+
+// Valid indicates whether the value is a known member of the DimensionBasis enum.
+func (e DimensionBasis) Valid() bool {
+	switch e {
+	case DimensionBasisActual:
+		return true
+	case DimensionBasisNominal:
+		return true
+	default:
+		return false
+	}
+}
+
 // Cents Whole cents. Zero is valid.
 type Cents = json.Number
 
@@ -60,6 +78,9 @@ type DesignSummary struct {
 	UpdatedAt   time.Time `json:"updatedAt"`
 	Version     int       `json:"version"`
 }
+
+// DimensionBasis defines model for DimensionBasis.
+type DimensionBasis string
 
 // Inches Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal.
 type Inches = json.Number
@@ -122,6 +143,24 @@ type Me struct {
 	ClerkUserId string `json:"clerk_user_id"`
 	DisplayName string `json:"display_name"`
 	UserId      string `json:"user_id"`
+}
+
+// OptimizeFlags The resolved kerf and dimension basis. kerfInches is null when the kerf is zero.
+type OptimizeFlags struct {
+	DimensionBasis DimensionBasis `json:"dimensionBasis"`
+
+	// KerfInches The saw gap along the board, in inches. Kerf is not applied to thickness or width. Null when the kerf is zero.
+	KerfInches *json.Number `json:"kerfInches"`
+	UseKerf    bool         `json:"useKerf"`
+}
+
+// OptimizeRequest An omitted axis uses the caller settings. useKerf true requires kerfInches greater than zero. useKerf false requires kerfInches omitted or null.
+type OptimizeRequest struct {
+	DimensionBasis *DimensionBasis `json:"dimensionBasis,omitempty"`
+
+	// KerfInches The saw gap along the board, in inches. Kerf is not applied to thickness or width.
+	KerfInches *json.Number `json:"kerfInches,omitempty"`
+	UseKerf    *bool        `json:"useKerf,omitempty"`
 }
 
 // Pattern defines model for Pattern.
@@ -213,6 +252,9 @@ type CreateDesignJSONRequestBody = CreateDesignRequest
 
 // ReplaceDesignJSONRequestBody defines body for ReplaceDesign for application/json ContentType.
 type ReplaceDesignJSONRequestBody = ReplaceDesignRequest
+
+// OptimizeDesignJSONRequestBody defines body for OptimizeDesign for application/json ContentType.
+type OptimizeDesignJSONRequestBody = OptimizeRequest
 
 // CreateMaterialJSONRequestBody defines body for CreateMaterial for application/json ContentType.
 type CreateMaterialJSONRequestBody = MaterialWrite

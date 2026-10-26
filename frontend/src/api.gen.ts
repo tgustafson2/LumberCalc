@@ -140,6 +140,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/designs/{id}/optimize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** @description Resolves the kerf and the dimension basis for the design. An omitted axis uses the caller settings. useKerf true requires kerfInches greater than zero. useKerf false requires kerfInches omitted or null. Kerf is the saw gap along the board. Kerf is not applied to thickness or width. This call does not write the design. */
+        post: operations["optimizeDesign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/patterns": {
         parameters: {
             query?: never;
@@ -427,6 +446,22 @@ export interface components {
         DocumentUuid: string;
         /** @description Exact inches. The numeric value stays exact. An exponent form can come back as a plain decimal. */
         Inches: number;
+        /** @enum {string} */
+        DimensionBasis: "nominal" | "actual";
+        /** @description An omitted axis uses the caller settings. useKerf true requires kerfInches greater than zero. useKerf false requires kerfInches omitted or null. */
+        OptimizeRequest: {
+            useKerf?: boolean;
+            /** @description The saw gap along the board, in inches. Kerf is not applied to thickness or width. */
+            kerfInches?: number | null;
+            dimensionBasis?: components["schemas"]["DimensionBasis"];
+        };
+        /** @description The resolved kerf and dimension basis. kerfInches is null when the kerf is zero. */
+        OptimizeFlags: {
+            useKerf: boolean;
+            /** @description The saw gap along the board, in inches. Kerf is not applied to thickness or width. Null when the kerf is zero. */
+            kerfInches: number | null;
+            dimensionBasis: components["schemas"]["DimensionBasis"];
+        };
         MaterialWrite: {
             /** @description The server removes leading and trailing whitespace. A blank result is rejected. */
             name: string;
@@ -1042,6 +1077,69 @@ export interface operations {
                 };
             };
             /** @description The design was not unpublished. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    optimizeDesign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["OptimizeRequest"];
+            };
+        };
+        responses: {
+            /** @description The resolved kerf and dimension basis. kerfInches is null when the kerf is zero. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OptimizeFlags"];
+                };
+            };
+            /** @description The body is not a flag overlay. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The caller has no such design. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The flags were not resolved. */
             500: {
                 headers: {
                     [name: string]: unknown;

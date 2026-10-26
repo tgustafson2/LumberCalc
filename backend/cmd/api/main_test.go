@@ -85,6 +85,10 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		DeletePrice: func(context.Context, store.UserID, store.PriceID) error {
 			return store.ErrPriceNotFound
 		},
+		GetOptimizeInput: func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error) {
+			t.Fatal("get optimize input was called")
+			return store.OptimizeInput{}, nil
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

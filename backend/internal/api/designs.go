@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
 	"strconv"
 
@@ -176,17 +175,6 @@ func (a *API) unpublishDesign(w http.ResponseWriter, r *http.Request, c Caller) 
 		return
 	}
 	server.WriteJSON(w, http.StatusOK, PublishedPattern{Id: patternID.String()})
-}
-
-func rejectRequestBody(body io.Reader) error {
-	raw, err := io.ReadAll(io.LimitReader(body, maxBody+1))
-	if err != nil {
-		return err
-	}
-	if len(raw) > maxBody || len(bytes.TrimSpace(raw)) != 0 {
-		return errBadBody
-	}
-	return nil
 }
 
 func (a *API) deleteDesign(w http.ResponseWriter, r *http.Request, c Caller) {

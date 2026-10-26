@@ -43,6 +43,7 @@ func TestGetMeReturnsTheUserRowID(t *testing.T) {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
@@ -100,6 +101,7 @@ func TestGetMaterialsReturnsTheSystemCatalog(t *testing.T) {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
@@ -227,6 +229,7 @@ func TestForeignAndDeletedDesignsMatchAMissingID(t *testing.T) {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
@@ -412,6 +415,7 @@ func TestUnpublishThenPublishKeepsThePatternID(t *testing.T) {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
@@ -522,6 +526,7 @@ func TestAddPatternThenGetTheDesign(t *testing.T) {
 		ListPrices:         st.ListPrices,
 		UpdatePrice:        st.UpdatePrice,
 		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
 		PublicName:         idlePublicName,
 		ListPublicPatterns: st.ListPublicPatterns,
 		GetPattern:         st.GetPattern,
@@ -590,4 +595,60 @@ func TestAddPatternThenGetTheDesign(t *testing.T) {
 
 	clerk = publisherClerk
 	assertNotFound(t, callJSON(h, http.MethodGet, "/v1/designs/"+clone.Id, ""))
+}
+
+func TestOptimizeEmptyDesignResolvesCallerSettings(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	st := store.New(pool)
+	h, err := New(Deps{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Authenticate: func(*http.Request) (store.ClerkUserID, error) {
+			return mustClerk(t, "user_optimize_http"), nil
+		},
+		EnsureUser: st.EnsureUser,
+		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
+			return "Ada", nil
+		},
+		Save:               st.Save,
+		Get:                st.Get,
+		List:               st.List,
+		Delete:             st.Delete,
+		Copy:               st.Copy,
+		Publish:            st.Publish,
+		Unpublish:          st.Unpublish,
+		CreateMaterial:     st.CreateMaterial,
+		ListMaterials:      st.ListMaterials,
+		UpdateMaterial:     st.UpdateMaterial,
+		DeleteMaterial:     st.DeleteMaterial,
+		CreatePrice:        st.CreatePrice,
+		ListPrices:         st.ListPrices,
+		UpdatePrice:        st.UpdatePrice,
+		DeletePrice:        st.DeletePrice,
+		GetOptimizeInput:   st.GetOptimizeInput,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: st.ListPublicPatterns,
+		GetPattern:         st.GetPattern,
+		AddPattern:         st.AddPattern,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created := callJSON(h, http.MethodPost, "/v1/designs", `{"name":"Bench"}`)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("status = %d, body = %s", created.Code, created.Body.String())
+	}
+	var design Design
+	if err := json.Unmarshal(created.Body.Bytes(), &design); err != nil {
+		t.Fatal(err)
+	}
+	got := callJSON(h, http.MethodPost, "/v1/designs/"+design.Id+"/optimize", "")
+	assertStatus(t, got, http.StatusOK, "")
+	if strings.TrimSpace(got.Body.String()) != `{"useKerf":false,"kerfInches":null,"dimensionBasis":"nominal"}` {
+		t.Fatalf("body = %s", got.Body.String())
+	}
+	got = callJSON(h, http.MethodPost, "/v1/designs/"+design.Id+"/optimize", `{"dimensionBasis":"actual"}`)
+	assertStatus(t, got, http.StatusOK, "")
+	if strings.TrimSpace(got.Body.String()) != `{"useKerf":false,"kerfInches":null,"dimensionBasis":"actual"}` {
+		t.Fatalf("body = %s", got.Body.String())
+	}
 }

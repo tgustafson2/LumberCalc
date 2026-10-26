@@ -51,6 +51,7 @@ type Deps struct {
 	ListPrices         func(context.Context, store.UserID) ([]store.Price, error)
 	UpdatePrice        func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
 	DeletePrice        func(context.Context, store.UserID, store.PriceID) error
+	GetOptimizeInput   func(context.Context, store.UserID, store.DesignID, store.FlagChoice) (store.OptimizeInput, error)
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -136,6 +137,9 @@ func New(d Deps) (http.Handler, error) {
 	if d.DeletePrice == nil {
 		return nil, errors.New("delete price is required")
 	}
+	if d.GetOptimizeInput == nil {
+		return nil, errors.New("get optimize input is required")
+	}
 	a := &API{d: d, mux: http.NewServeMux()}
 	a.handle("GET /v1/me", a.me)
 	a.handle("POST /v1/designs", a.createDesign)
@@ -146,6 +150,7 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("POST /v1/designs/{id}/copy", a.copyDesign)
 	a.handle("POST /v1/designs/{id}/publish", a.publishDesign)
 	a.handle("POST /v1/designs/{id}/unpublish", a.unpublishDesign)
+	a.handle("POST /v1/designs/{id}/optimize", a.optimizeDesign)
 	a.handle("GET /v1/patterns", a.listPatterns)
 	a.handle("GET /v1/patterns/{id}", a.getPattern)
 	a.handle("POST /v1/patterns/{id}/add", a.addPattern)

@@ -200,6 +200,7 @@ func patternHandler(
 		ListPrices:         idleListPrices,
 		UpdatePrice:        idleUpdatePrice,
 		DeletePrice:        idleDeletePrice,
+		GetOptimizeInput:   idleGetOptimizeInput(t),
 	})
 	if err != nil {
 		t.Fatal(err)
