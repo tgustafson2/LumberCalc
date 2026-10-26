@@ -939,7 +939,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The design was published. */
+            /** @description The design was published. One pattern exists per design. A later publish overwrites that pattern with the current design. That pattern id stays the same. A design already added from the pattern keeps its document. */
             200: {
                 headers: {
                     [name: string]: unknown;

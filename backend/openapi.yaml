@@ -365,7 +365,7 @@ paths:
       tags: [v1]
       responses:
         "200":
-          description: The design was published.
+          description: The design was published. One pattern exists per design. A later publish overwrites that pattern with the current design. That pattern id stays the same. A design already added from the pattern keeps its document.
           content:
             application/json:
               schema:
