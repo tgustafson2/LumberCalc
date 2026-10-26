@@ -16,6 +16,9 @@ import { loadCatalog, runCatalogCommand } from "./catalog/model";
 import { MaterialsPage } from "./catalog/materials-page";
 import { PricesPage } from "./catalog/prices-page";
 import { designActions, loadDesignDetail, loadDesignList } from "./designs/model";
+import { PatternDetailPage } from "./patterns/detail-page";
+import { PatternGalleryPage } from "./patterns/gallery-page";
+import { addPattern, loadPatternDetail, loadPatternGallery } from "./patterns/model";
 import { redirectFor, type SessionGate } from "./gate";
 
 type ResolvedGate = Exclude<SessionGate, { kind: "loading" }>;
@@ -94,6 +97,21 @@ const designDetailRoute = createRoute({
   component: DesignDetailRoute,
 });
 
+const patternsRoute = createRoute({
+  getParentRoute: () => signedInBranch,
+  path: "/patterns",
+  loader: ({ context, abortController }) => loadPatternGallery(context.api, abortController.signal),
+  component: PatternGalleryRoute,
+});
+
+const patternDetailRoute = createRoute({
+  getParentRoute: () => signedInBranch,
+  path: "/patterns/$patternId",
+  loader: ({ context, params, abortController }) =>
+    loadPatternDetail(context.api, params.patternId, abortController.signal),
+  component: PatternDetailRoute,
+});
+
 const materialsRoute = createRoute({
   getParentRoute: () => signedInBranch,
   path: "/materials",
@@ -110,7 +128,14 @@ const pricesRoute = createRoute({
 
 const routeTree = rootRoute.addChildren([
   signedOutBranch.addChildren([signInRoute]),
-  signedInBranch.addChildren([designsRoute, designDetailRoute, materialsRoute, pricesRoute]),
+  signedInBranch.addChildren([
+    designsRoute,
+    designDetailRoute,
+    patternsRoute,
+    patternDetailRoute,
+    materialsRoute,
+    pricesRoute,
+  ]),
 ]);
 
 function buildRouter(gate: ResolvedGate) {
@@ -157,7 +182,18 @@ function DesignsListRoute() {
 function DesignDetailRoute() {
   const model = designDetailRoute.useLoaderData();
   const { api } = designDetailRoute.useRouteContext();
-  return <DesignDetailPage model={model} rename={designActions(api).rename} />;
+  const { rename, setPublication } = designActions(api);
+  return <DesignDetailPage model={model} rename={rename} setPublication={setPublication} />;
+}
+
+function PatternGalleryRoute() {
+  return <PatternGalleryPage model={patternsRoute.useLoaderData()} />;
+}
+
+function PatternDetailRoute() {
+  const model = patternDetailRoute.useLoaderData();
+  const { api } = patternDetailRoute.useRouteContext();
+  return <PatternDetailPage model={model} add={addPattern(api)} />;
 }
 
 function MaterialsRoute() {

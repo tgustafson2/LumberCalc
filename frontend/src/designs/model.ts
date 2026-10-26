@@ -1,4 +1,12 @@
-import type { Design, DesignId, DesignSummary, V1Client, V1Failure } from "../api";
+import {
+  isNotFound,
+  type Design,
+  type DesignId,
+  type DesignSummary,
+  type Publication,
+  type V1Client,
+  type V1Failure,
+} from "../api";
 
 export type DesignsListModel =
   | {
@@ -8,9 +16,29 @@ export type DesignsListModel =
     }
   | V1Failure;
 
+export type EditableDesign = Omit<Design, "publication">;
+
+export type PublicationCommand = "publish" | "unpublish";
+
+export type PublicationControl = {
+  readonly command: PublicationCommand;
+  readonly label: "Publish" | "Republish" | "Unpublish";
+};
+
 export type DesignDetailModel =
-  | { readonly kind: "ok"; readonly design: Design }
+  | {
+      readonly kind: "ok";
+      readonly design: EditableDesign;
+      readonly controls: readonly PublicationControl[];
+      readonly publicationText: string;
+    }
   | { readonly kind: "absent" }
+  | V1Failure;
+
+export type SetPublicationResult =
+  | { readonly kind: "changed" }
+  | { readonly kind: "absent" }
+  | { readonly kind: "rejected"; readonly notice: string }
   | V1Failure;
 
 export type CreateDesignResult =
@@ -34,7 +62,16 @@ export type DesignActions = {
   readonly create: (rawName: string, signal?: AbortSignal) => Promise<CreateDesignResult>;
   readonly copy: (id: DesignId, signal?: AbortSignal) => Promise<CopyDesignResult>;
   readonly delete: (id: DesignId, signal?: AbortSignal) => Promise<DeleteDesignResult>;
-  readonly rename: (design: Design, rawName: string, signal?: AbortSignal) => Promise<RenameDesignResult>;
+  readonly rename: (
+    design: EditableDesign,
+    rawName: string,
+    signal?: AbortSignal,
+  ) => Promise<RenameDesignResult>;
+  readonly setPublication: (
+    id: DesignId,
+    command: PublicationCommand,
+    signal?: AbortSignal,
+  ) => Promise<SetPublicationResult>;
 };
 
 export type ListActivity =
@@ -57,6 +94,26 @@ export type DetailEvent =
   | { readonly type: "load-latest" };
 
 const staleVersionMessage = "stale version";
+
+const publicationControls = {
+  unpublished: [{ command: "publish", label: "Publish" }],
+  public: [
+    { command: "unpublish", label: "Unpublish" },
+    { command: "publish", label: "Republish" },
+  ],
+  private: [{ command: "publish", label: "Republish" }],
+} as const satisfies Record<Publication["kind"], readonly PublicationControl[]>;
+
+const publicationText = {
+  unpublished: "Not published.",
+  public: "Public in the patterns gallery.",
+  private: "Private. Only you can see the pattern.",
+} satisfies Record<Publication["kind"], string>;
+
+const publishRejections: ReadonlyMap<string, string> = new Map([
+  ["empty_design", "Add at least one piece before you publish."],
+  ["custom_material", "Use only system materials before you publish."],
+]);
 
 const updatedAtFormat = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
@@ -85,7 +142,13 @@ export async function loadDesignDetail(
   }
   const result = await api.getDesign(id, { signal });
   if (result.kind === "ok") {
-    return { kind: "ok", design: result.value };
+    const { publication, ...design } = result.value;
+    return {
+      kind: "ok",
+      design,
+      controls: publicationControls[publication.kind],
+      publicationText: publicationText[publication.kind],
+    };
   }
   if (isNotFound(result)) {
     return { kind: "absent" };
@@ -146,6 +209,22 @@ export function designActions(api: V1Client): DesignActions {
       }
       if (isStaleVersion(result)) {
         return { kind: "stale" };
+      }
+      return result;
+    },
+    setPublication: async (id, command, signal) => {
+      const send = command === "publish" ? api.publishDesign : api.unpublishDesign;
+      const result = await send(id, { signal });
+      if (result.kind === "ok") {
+        return { kind: "changed" };
+      }
+      if (isNotFound(result)) {
+        return { kind: "absent" };
+      }
+      const notice =
+        result.kind === "failed" && result.status === 400 ? publishRejections.get(result.message) : undefined;
+      if (notice !== undefined) {
+        return { kind: "rejected", notice };
       }
       return result;
     },
@@ -218,7 +297,7 @@ export function formatUpdatedAt(updatedAt: string): string {
   return updatedAtFormat.format(parsed);
 }
 
-export function designSummaryText(design: Design): string {
+export function designSummaryText(design: EditableDesign): string {
   return `Version ${design.version}. Updated ${formatUpdatedAt(design.updatedAt)}. Piece count ${design.document.pieces.length}. Connection count ${design.document.connections.length}.`;
 }
 
@@ -236,10 +315,6 @@ function designIdFromParam(param: string): DesignId | null {
     return null;
   }
   return trimmed as DesignId;
-}
-
-function isNotFound(result: V1Failure): boolean {
-  return result.kind === "failed" && result.status === 404;
 }
 
 function isStaleVersion(result: V1Failure): boolean {

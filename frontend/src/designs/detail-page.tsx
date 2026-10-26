@@ -10,11 +10,13 @@ import {
   type DesignActions,
   type DesignDetailModel,
   type DetailActivity,
+  type PublicationCommand,
 } from "./model";
 
 export function DesignDetailPage(props: {
   readonly model: DesignDetailModel;
   readonly rename: DesignActions["rename"];
+  readonly setPublication: DesignActions["setPublication"];
 }) {
   const router = useRouter();
   const gate = useRef<"open" | "busy" | "held">("open");
@@ -71,6 +73,33 @@ export function DesignDetailPage(props: {
   }
 
   const design = props.model.design;
+
+  function onPublication(command: PublicationCommand) {
+    const job = beginAction(gate, async () => {
+      const settled = await settle(props.setPublication(design.id, command));
+      if (settled.kind === "aborted") {
+        return "done";
+      }
+      if (settled.kind === "changed" || settled.kind === "absent") {
+        setNotice(null);
+        await router.invalidate();
+        return "done";
+      }
+      if (settled.kind === "rejected") {
+        setNotice(settled.notice);
+        return "done";
+      }
+      showMutation(settled);
+      return "done";
+    });
+    if (job === null) {
+      return;
+    }
+    setActivity((state) => nextDetailActivity(state, { type: "start-work" }));
+    void job.finally(() => {
+      setActivity((state) => nextDetailActivity(state, { type: "stop-work" }));
+    });
+  }
 
   function onSave(event: FormEvent) {
     event.preventDefault();
@@ -141,6 +170,19 @@ export function DesignDetailPage(props: {
           </button>
         )}
       </form>
+      <section>
+        <p>{props.model.publicationText}</p>
+        {props.model.controls.map((control) => (
+          <button
+            key={control.label}
+            type="button"
+            disabled={activity.kind !== "idle"}
+            onClick={() => onPublication(control.command)}
+          >
+            {control.label}
+          </button>
+        ))}
+      </section>
       {notice !== null ? <p>{notice}</p> : null}
       <pre>{JSON.stringify(design.document, null, 2)}</pre>
       <Link to="/designs">All designs</Link>

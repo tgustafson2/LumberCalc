@@ -7,6 +7,7 @@ export function SignedInHeader(props: { readonly title: string }) {
       <h1>{props.title}</h1>
       <nav>
         <Link to="/designs">Designs</Link>
+        <Link to="/patterns">Patterns</Link>
         <Link to="/materials">Materials</Link>
         <Link to="/prices">Prices</Link>
       </nav>

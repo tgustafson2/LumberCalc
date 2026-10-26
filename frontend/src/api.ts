@@ -32,8 +32,14 @@ export type DesignSummary = {
   readonly updatedAt: string;
 };
 
+export type Publication =
+  | { readonly kind: "unpublished" }
+  | { readonly kind: "public"; readonly patternId: PatternId }
+  | { readonly kind: "private"; readonly patternId: PatternId };
+
 export type Design = DesignSummary & {
   readonly document: DesignDocument;
+  readonly publication: Publication;
 };
 
 export type PatternSummary = {
@@ -119,8 +125,11 @@ export type V1Client = {
   ) => Promise<V1Result<Design>>;
   readonly deleteDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<null>>;
   readonly copyDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<Design>>;
+  readonly publishDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<PatternId>>;
+  readonly unpublishDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<PatternId>>;
   readonly listPatterns: (options?: RequestOptions) => Promise<V1Result<readonly PatternSummary[]>>;
   readonly getPattern: (id: PatternId, options?: RequestOptions) => Promise<V1Result<Pattern>>;
+  readonly addPattern: (id: PatternId, options?: RequestOptions) => Promise<V1Result<Design>>;
   readonly createMaterial: (body: MaterialWrite, options?: RequestOptions) => Promise<V1Result<Material>>;
   readonly listMaterials: (options?: RequestOptions) => Promise<V1Result<readonly Material[]>>;
   readonly replaceMaterial: (
@@ -197,6 +206,20 @@ export function createV1Client(options: {
           http.POST("/v1/designs/{id}/copy", { params: { path: { id } }, signal, headers }),
         toDesign,
       ),
+    publishDesign: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.POST("/v1/designs/{id}/publish", { params: { path: { id } }, signal, headers }),
+        toPublishedPattern,
+      ),
+    unpublishDesign: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.POST("/v1/designs/{id}/unpublish", { params: { path: { id } }, signal, headers }),
+        toPublishedPattern,
+      ),
     listPatterns: ({ signal } = {}) =>
       send(
         options.getToken,
@@ -208,6 +231,13 @@ export function createV1Client(options: {
         options.getToken,
         (headers) => http.GET("/v1/patterns/{id}", { params: { path: { id } }, signal, headers }),
         toPattern,
+      ),
+    addPattern: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) =>
+          http.POST("/v1/patterns/{id}/add", { params: { path: { id } }, signal, headers }),
+        toDesign,
       ),
     createMaterial: (body, { signal } = {}) =>
       send(
@@ -301,12 +331,42 @@ async function send<W, T>(
   };
 }
 
+export function isNotFound(result: V1Failure): boolean {
+  return result.kind === "failed" && result.status === 404;
+}
+
 function toDesign(wire: Wire["Design"]): Parsed<Design> {
   const summary = toSummary(wire);
-  if (summary.kind !== "ok" || wire.document === undefined) {
+  const publication = toPublication(wire.publication);
+  if (summary.kind !== "ok" || wire.document === undefined || publication.kind !== "ok") {
     return { kind: "invalid" };
   }
-  return { kind: "ok", value: { ...summary.value, document: wire.document } };
+  return {
+    kind: "ok",
+    value: { ...summary.value, document: wire.document, publication: publication.value },
+  };
+}
+
+function toPublication(wire: Wire["Design"]["publication"] | undefined): Parsed<Publication> {
+  if (wire === null) {
+    return { kind: "ok", value: { kind: "unpublished" } };
+  }
+  const patternId = text(wire?.patternId);
+  if (patternId === null || typeof wire?.isPublic !== "boolean") {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "ok",
+    value: { kind: wire.isPublic ? "public" : "private", patternId: patternId as PatternId },
+  };
+}
+
+function toPublishedPattern(wire: Wire["PublishedPattern"]): Parsed<PatternId> {
+  const id = text(wire.id);
+  if (id === null) {
+    return { kind: "invalid" };
+  }
+  return { kind: "ok", value: id as PatternId };
 }
 
 function toDesignList(wire: readonly Wire["DesignSummary"][]): Parsed<readonly DesignSummary[]> {

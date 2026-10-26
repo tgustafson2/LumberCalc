@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ClerkUserId, Material, MaterialId, Price, PriceId, UserId, V1Client } from "../api";
+import type { ClerkUserId, Material, MaterialId, Price, PriceId, UserId } from "../api";
+import { stubClient } from "../test-client";
 import {
   blankMaterialFields,
   buildPriceGrid,
@@ -124,29 +125,6 @@ const readyFields = fields({
   roughWidthIn: "3/4",
 });
 
-function client(methods: Partial<V1Client>): V1Client {
-  return {
-    me: async () => ({ kind: "invalid" }),
-    createDesign: async () => ({ kind: "invalid" }),
-    listDesigns: async () => ({ kind: "invalid" }),
-    getDesign: async () => ({ kind: "invalid" }),
-    replaceDesign: async () => ({ kind: "invalid" }),
-    deleteDesign: async () => ({ kind: "invalid" }),
-    copyDesign: async () => ({ kind: "invalid" }),
-    listPatterns: async () => ({ kind: "invalid" }),
-    getPattern: async () => ({ kind: "invalid" }),
-    createMaterial: async () => ({ kind: "invalid" }),
-    listMaterials: async () => ({ kind: "invalid" }),
-    replaceMaterial: async () => ({ kind: "invalid" }),
-    deleteMaterial: async () => ({ kind: "invalid" }),
-    createPrice: async () => ({ kind: "invalid" }),
-    listPrices: async () => ({ kind: "invalid" }),
-    updatePrice: async () => ({ kind: "invalid" }),
-    deletePrice: async () => ({ kind: "invalid" }),
-    ...methods,
-  };
-}
-
 function rowAt(grid: PriceGrid, index: number): PriceRow {
   const row = grid.rows[index];
   if (row === undefined) {
@@ -178,7 +156,7 @@ describe("loadCatalog", () => {
       message: "prices failed",
     }));
 
-    await expect(loadCatalog(client({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
+    await expect(loadCatalog(stubClient({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
       kind: "failed",
       status: 500,
       message: "me failed",
@@ -209,7 +187,7 @@ describe("loadCatalog", () => {
       message: "prices failed",
     }));
 
-    await expect(loadCatalog(client({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
+    await expect(loadCatalog(stubClient({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
       kind: "failed",
       status: 502,
       message: "materials failed",
@@ -237,7 +215,7 @@ describe("loadCatalog", () => {
     }));
     const listPrices = vi.fn(async () => ({ kind: "ok" as const, value: [pricedAt8] }));
 
-    await expect(loadCatalog(client({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
+    await expect(loadCatalog(stubClient({ me, listMaterials, listPrices }), signal)).resolves.toEqual({
       kind: "ok",
       displayName: "Ada",
       materials: [
@@ -297,7 +275,7 @@ describe("parseMaterialFields", () => {
 describe("runCatalogCommand", () => {
   it("does not create a material when an inch field is invalid", async () => {
     const createMaterial = vi.fn();
-    const outcome = await runCatalogCommand(client({ createMaterial }), {
+    const outcome = await runCatalogCommand(stubClient({ createMaterial }), {
       type: "create-material",
       fields: fields({
         name: "Pine",
@@ -320,7 +298,7 @@ describe("runCatalogCommand", () => {
 
   it("does not replace a material when an inch field is invalid", async () => {
     const replaceMaterial = vi.fn();
-    await runCatalogCommand(client({ replaceMaterial }), {
+    await runCatalogCommand(stubClient({ replaceMaterial }), {
       type: "replace-material",
       target: custom,
       fields: fields({ name: "Pine", nominalThicknessIn: "nope" }),
@@ -333,7 +311,7 @@ describe("runCatalogCommand", () => {
     const createMaterial = vi.fn(async () => ({ kind: "ok" as const, value: material(custom) }));
     await expect(
       runCatalogCommand(
-        client({ createMaterial }),
+        stubClient({ createMaterial }),
         { type: "create-material", fields: readyFields },
         signal,
       ),
@@ -363,7 +341,7 @@ describe("runCatalogCommand", () => {
       message: "material in use",
     }));
     await expect(
-      runCatalogCommand(client({ deleteMaterial }), { type: "delete-material", target: custom }),
+      runCatalogCommand(stubClient({ deleteMaterial }), { type: "delete-material", target: custom }),
     ).resolves.toEqual({ kind: "failed", status: 409, message: "material in use" });
   });
 
@@ -380,7 +358,7 @@ describe("runCatalogCommand", () => {
     }));
 
     await expect(
-      runCatalogCommand(client({ replaceMaterial }), {
+      runCatalogCommand(stubClient({ replaceMaterial }), {
         type: "replace-material",
         target: custom,
         fields: readyFields,
@@ -391,7 +369,7 @@ describe("runCatalogCommand", () => {
       message: "System materials cannot be changed.",
     });
     await expect(
-      runCatalogCommand(client({ deleteMaterial }), { type: "delete-material", target: custom }),
+      runCatalogCommand(stubClient({ deleteMaterial }), { type: "delete-material", target: custom }),
     ).resolves.toEqual({
       kind: "failed",
       status: 403,
@@ -414,13 +392,13 @@ describe("runCatalogCommand", () => {
 
     await expect(
       runCatalogCommand(
-        client({ deleteMaterial }),
+        stubClient({ deleteMaterial }),
         { type: "delete-material", target: custom },
         signal,
       ),
     ).resolves.toEqual({ kind: "saved" });
     await expect(
-      runCatalogCommand(client({ deletePrice }), { type: "delete-price", price: pricedAt8 }, signal),
+      runCatalogCommand(stubClient({ deletePrice }), { type: "delete-price", price: pricedAt8 }, signal),
     ).resolves.toEqual({ kind: "saved" });
     expect(deleteMaterial.mock.calls).toEqual([[custom.id, { signal }]]);
     expect(deletePrice.mock.calls).toEqual([[pricedAt8.id, { signal }]]);
@@ -429,7 +407,7 @@ describe("runCatalogCommand", () => {
   it("does not save a price when the dollars are invalid", async () => {
     const createPrice = vi.fn();
     const updatePrice = vi.fn();
-    const api = client({ createPrice, updatePrice });
+    const api = stubClient({ createPrice, updatePrice });
 
     await expect(
       runCatalogCommand(api, {
@@ -461,7 +439,7 @@ describe("runCatalogCommand", () => {
 
     await expect(
       runCatalogCommand(
-        client({ createPrice }),
+        stubClient({ createPrice }),
         { type: "create-price", materialId: custom.id, lengthIn: 120, dollars: "4.10" },
         signal,
       ),

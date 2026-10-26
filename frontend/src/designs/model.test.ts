@@ -5,9 +5,11 @@ import type {
   DesignDocument,
   DesignId,
   DesignSummary,
+  PatternId,
+  Publication,
   UserId,
-  V1Client,
 } from "../api";
+import { stubClient } from "../test-client";
 import {
   designActions,
   designSummaryText,
@@ -24,6 +26,7 @@ import {
 
 const designId = "00000000-0000-4000-8000-000000000001" as DesignId;
 const otherId = "00000000-0000-4000-8000-000000000002" as DesignId;
+const patternId = "00000000-0000-4000-8000-000000000003" as PatternId;
 
 const document = {
   schemaVersion: 1,
@@ -68,7 +71,10 @@ const design: Design = {
   version: 4,
   updatedAt: "2026-03-15T18:04:00.000Z",
   document,
+  publication: { kind: "unpublished" },
 };
+
+const { publication: _publication, ...editable } = design;
 
 const summary: DesignSummary = {
   id: designId,
@@ -77,29 +83,6 @@ const summary: DesignSummary = {
   version: 4,
   updatedAt: "2026-03-15T18:04:00.000Z",
 };
-
-function client(methods: Partial<V1Client>): V1Client {
-  return {
-    me: async () => ({ kind: "invalid" }),
-    createDesign: async () => ({ kind: "invalid" }),
-    listDesigns: async () => ({ kind: "invalid" }),
-    getDesign: async () => ({ kind: "invalid" }),
-    replaceDesign: async () => ({ kind: "invalid" }),
-    deleteDesign: async () => ({ kind: "invalid" }),
-    copyDesign: async () => ({ kind: "invalid" }),
-    listPatterns: async () => ({ kind: "invalid" }),
-    getPattern: async () => ({ kind: "invalid" }),
-    createMaterial: async () => ({ kind: "invalid" }),
-    listMaterials: async () => ({ kind: "invalid" }),
-    replaceMaterial: async () => ({ kind: "invalid" }),
-    deleteMaterial: async () => ({ kind: "invalid" }),
-    createPrice: async () => ({ kind: "invalid" }),
-    listPrices: async () => ({ kind: "invalid" }),
-    updatePrice: async () => ({ kind: "invalid" }),
-    deletePrice: async () => ({ kind: "invalid" }),
-    ...methods,
-  };
-}
 
 describe("loadDesignList", () => {
   it("returns the me failure when the list also fails", async () => {
@@ -111,7 +94,7 @@ describe("loadDesignList", () => {
       message: "list failed",
     }));
 
-    await expect(loadDesignList(client({ me, listDesigns }), signal)).resolves.toEqual({
+    await expect(loadDesignList(stubClient({ me, listDesigns }), signal)).resolves.toEqual({
       kind: "failed",
       status: 500,
       message: "me failed",
@@ -133,7 +116,7 @@ describe("loadDesignList", () => {
     }));
     const listDesigns = vi.fn(async () => ({ kind: "ok" as const, value: [summary, second] }));
 
-    await expect(loadDesignList(client({ me, listDesigns }), signal)).resolves.toEqual({
+    await expect(loadDesignList(stubClient({ me, listDesigns }), signal)).resolves.toEqual({
       kind: "ok",
       displayName: "Ada",
       designs: [summary, second],
@@ -146,7 +129,7 @@ describe("loadDesignDetail", () => {
     const signal = new AbortController().signal;
     const getDesign = vi.fn();
 
-    await expect(loadDesignDetail(client({ getDesign }), "   ", signal)).resolves.toEqual({
+    await expect(loadDesignDetail(stubClient({ getDesign }), "   ", signal)).resolves.toEqual({
       kind: "absent",
     });
     expect(getDesign.mock.calls).toEqual([]);
@@ -160,28 +143,71 @@ describe("loadDesignDetail", () => {
       message: "not found",
     }));
 
-    await expect(loadDesignDetail(client({ getDesign }), designId, signal)).resolves.toEqual({
+    await expect(loadDesignDetail(stubClient({ getDesign }), designId, signal)).resolves.toEqual({
       kind: "absent",
     });
     expect(getDesign.mock.calls).toEqual([[designId, { signal }]]);
   });
 
-  it("returns the loaded design", async () => {
+  it("returns the loaded design without its publication", async () => {
     const signal = new AbortController().signal;
     const getDesign = vi.fn(async () => ({ kind: "ok" as const, value: design }));
 
-    await expect(loadDesignDetail(client({ getDesign }), ` ${designId} `, signal)).resolves.toEqual({
-      kind: "ok",
-      design,
-    });
+    const model = await loadDesignDetail(stubClient({ getDesign }), ` ${designId} `, signal);
+
+    expect(model.kind === "ok" ? model.design : model).toStrictEqual(editable);
+    expect(model.kind === "ok" && "publication" in model.design).toBe(false);
     expect(getDesign.mock.calls).toEqual([[designId, { signal }]]);
+  });
+
+  const publish = { command: "publish", label: "Publish" };
+  const republish = { command: "publish", label: "Republish" };
+  const unpublish = { command: "unpublish", label: "Unpublish" };
+
+  it.each<[Publication, readonly object[], string]>([
+    [{ kind: "unpublished" }, [publish], "Not published."],
+    [{ kind: "public", patternId }, [unpublish, republish], "Public in the patterns gallery."],
+    [{ kind: "private", patternId }, [republish], "Private. Only you can see the pattern."],
+  ])("shows the controls and sentence for %j", async (publication, controls, text) => {
+    const getDesign = vi.fn(async () => ({ kind: "ok" as const, value: { ...design, publication } }));
+
+    const model = await loadDesignDetail(stubClient({ getDesign }), designId, new AbortController().signal);
+
+    expect(model).toEqual({ kind: "ok", design: editable, controls, publicationText: text });
+  });
+});
+
+describe("setPublication", () => {
+  it("returns changed and drops the pattern id", async () => {
+    const signal = new AbortController().signal;
+    const publishDesign = vi.fn(async () => ({ kind: "ok" as const, value: patternId }));
+    const unpublishDesign = vi.fn(async () => ({ kind: "ok" as const, value: patternId }));
+    const actions = designActions(stubClient({ publishDesign, unpublishDesign }));
+
+    await expect(actions.setPublication(designId, "publish", signal)).resolves.toEqual({ kind: "changed" });
+    await expect(actions.setPublication(designId, "unpublish", signal)).resolves.toEqual({ kind: "changed" });
+    expect(publishDesign.mock.calls).toEqual([[designId, { signal }]]);
+    expect(unpublishDesign.mock.calls).toEqual([[designId, { signal }]]);
+  });
+
+  it.each([
+    [400, "empty_design", { kind: "rejected", notice: "Add at least one piece before you publish." }],
+    [400, "custom_material", { kind: "rejected", notice: "Use only system materials before you publish." }],
+    [404, "not found", { kind: "absent" }],
+    [400, "bad request", { kind: "failed", status: 400, message: "bad request" }],
+  ])("maps a %i %s response", async (status, message, expected) => {
+    const publishDesign = vi.fn(async () => ({ kind: "failed" as const, status, message }));
+
+    await expect(
+      designActions(stubClient({ publishDesign })).setPublication(designId, "publish"),
+    ).resolves.toEqual(expected);
   });
 });
 
 describe("designActions", () => {
   it("does not create a design when the name is blank", async () => {
     const createDesign = vi.fn();
-    const actions = designActions(client({ createDesign }));
+    const actions = designActions(stubClient({ createDesign }));
 
     await expect(actions.create("   ")).resolves.toEqual({ kind: "blank-name" });
     expect(createDesign.mock.calls).toEqual([]);
@@ -190,7 +216,7 @@ describe("designActions", () => {
   it("creates a design with the trimmed name only", async () => {
     const signal = new AbortController().signal;
     const createDesign = vi.fn(async () => ({ kind: "ok" as const, value: design }));
-    const actions = designActions(client({ createDesign }));
+    const actions = designActions(stubClient({ createDesign }));
 
     await expect(actions.create("  Shelf  ", signal)).resolves.toEqual({
       kind: "created",
@@ -201,7 +227,7 @@ describe("designActions", () => {
 
   it("does not replace a design when the name is blank or already saved", async () => {
     const replaceDesign = vi.fn();
-    const actions = designActions(client({ replaceDesign }));
+    const actions = designActions(stubClient({ replaceDesign }));
 
     await expect(actions.rename(design, "  ")).resolves.toEqual({ kind: "blank-name" });
     await expect(actions.rename(design, "  Shelf  ")).resolves.toEqual({ kind: "same-name" });
@@ -211,7 +237,7 @@ describe("designActions", () => {
   it("replaces a design with the loaded description, document, and version", async () => {
     const signal = new AbortController().signal;
     const replaceDesign = vi.fn(async () => ({ kind: "ok" as const, value: design }));
-    const actions = designActions(client({ replaceDesign }));
+    const actions = designActions(stubClient({ replaceDesign }));
 
     await expect(actions.rename(design, "  Bench  ", signal)).resolves.toEqual({ kind: "renamed" });
     expect(replaceDesign.mock.calls).toEqual([
@@ -234,7 +260,7 @@ describe("designActions", () => {
       status: 409,
       message: "stale version",
     }));
-    const actions = designActions(client({ replaceDesign }));
+    const actions = designActions(stubClient({ replaceDesign }));
 
     await expect(actions.rename(design, "Bench")).resolves.toEqual({ kind: "stale" });
   });
@@ -245,7 +271,7 @@ describe("designActions", () => {
       status: 404,
       message: "not found",
     }));
-    const actions = designActions(client({ replaceDesign }));
+    const actions = designActions(stubClient({ replaceDesign }));
 
     await expect(actions.rename(design, "Bench")).resolves.toEqual({ kind: "absent" });
   });
@@ -256,7 +282,7 @@ describe("designActions", () => {
       status: 409,
       message: "conflict",
     }));
-    const actions = designActions(client({ replaceDesign }));
+    const actions = designActions(stubClient({ replaceDesign }));
 
     await expect(actions.rename(design, "Bench")).resolves.toEqual({
       kind: "failed",
@@ -274,10 +300,10 @@ describe("designActions", () => {
       message: "not found",
     }));
 
-    await expect(designActions(client({ deleteDesign: deleted })).delete(designId, signal)).resolves.toEqual({
+    await expect(designActions(stubClient({ deleteDesign: deleted })).delete(designId, signal)).resolves.toEqual({
       kind: "gone",
     });
-    await expect(designActions(client({ deleteDesign: missing })).delete(designId, signal)).resolves.toEqual({
+    await expect(designActions(stubClient({ deleteDesign: missing })).delete(designId, signal)).resolves.toEqual({
       kind: "gone",
     });
     expect(deleted.mock.calls).toEqual([[designId, { signal }]]);
@@ -287,7 +313,7 @@ describe("designActions", () => {
   it("copies a design and drops the response body", async () => {
     const signal = new AbortController().signal;
     const copyDesign = vi.fn(async () => ({ kind: "ok" as const, value: design }));
-    const actions = designActions(client({ copyDesign }));
+    const actions = designActions(stubClient({ copyDesign }));
 
     await expect(actions.copy(designId, signal)).resolves.toEqual({ kind: "copied" });
     expect(copyDesign.mock.calls).toEqual([[designId, { signal }]]);

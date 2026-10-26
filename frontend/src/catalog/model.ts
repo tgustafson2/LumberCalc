@@ -1,4 +1,13 @@
-import type { Material, MaterialId, MaterialWrite, Price, V1Client, V1Failure, V1Result } from "../api";
+import {
+  isNotFound,
+  type Material,
+  type MaterialId,
+  type MaterialWrite,
+  type Price,
+  type V1Client,
+  type V1Failure,
+  type V1Result,
+} from "../api";
 import {
   formatInches,
   formatLength,
@@ -417,10 +426,6 @@ function forbidSystem(result: V1Failure): V1Failure {
     return { kind: "failed", status: 403, message: systemMaterialNotice };
   }
   return result;
-}
-
-function isNotFound(result: V1Failure): boolean {
-  return result.kind === "failed" && result.status === 404;
 }
 
 function callOptions(signal: AbortSignal | undefined): { readonly signal?: AbortSignal } {

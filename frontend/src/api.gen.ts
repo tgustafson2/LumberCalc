@@ -322,6 +322,12 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             document: components["schemas"]["DesignDocument"];
+            /** @description The pattern published from this design. Null when the design was never published. */
+            publication: {
+                /** Format: uuid */
+                patternId: string;
+                isPublic: boolean;
+            } | null;
         };
         PublishedPattern: {
             /** Format: uuid */
