@@ -19,3 +19,8 @@ WITH u AS (
     ON CONFLICT (user_id) DO NOTHING
 )
 SELECT id FROM u;
+
+-- name: GetUserSettings :one
+SELECT default_use_kerf, default_kerf_in, default_dimension_basis
+FROM user_settings
+WHERE user_id = sqlc.arg('user_id');

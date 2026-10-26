@@ -48,3 +48,22 @@ func (q *Queries) FindUser(ctx context.Context, clerkUserID string) (pgtype.UUID
 	err := row.Scan(&id)
 	return id, err
 }
+
+const getUserSettings = `-- name: GetUserSettings :one
+SELECT default_use_kerf, default_kerf_in, default_dimension_basis
+FROM user_settings
+WHERE user_id = $1
+`
+
+type GetUserSettingsRow struct {
+	DefaultUseKerf        bool
+	DefaultKerfIn         pgtype.Numeric
+	DefaultDimensionBasis string
+}
+
+func (q *Queries) GetUserSettings(ctx context.Context, userID pgtype.UUID) (GetUserSettingsRow, error) {
+	row := q.db.QueryRow(ctx, getUserSettings, userID)
+	var i GetUserSettingsRow
+	err := row.Scan(&i.DefaultUseKerf, &i.DefaultKerfIn, &i.DefaultDimensionBasis)
+	return i, err
+}
