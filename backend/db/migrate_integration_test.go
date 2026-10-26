@@ -35,7 +35,7 @@ func TestMigrateAgainstPostgres(t *testing.T) {
 			t.Fatalf("run %d: %v", i, errs[i])
 		}
 		switch {
-		case slices.Equal(results[i], []string{"001_init", "002_seed_dimensional_lumber", "003_material_usable"}):
+		case slices.Equal(results[i], []string{"001_init", "002_seed_dimensional_lumber", "003_material_usable", "004_pattern_reads"}):
 			appliedBy++
 		case len(results[i]) == 0:
 		default:

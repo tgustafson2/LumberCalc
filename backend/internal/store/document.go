@@ -154,6 +154,30 @@ func newV4() (string, error) {
 }
 
 func (d Document) MarshalJSON() ([]byte, error) {
+	return encodeWire(d.wire(func(id string) *string { return &id }))
+}
+
+// PublicDocument is a pattern document as any signed-in user sees it.
+// A piece keeps materialId only when that id is a system material. Any other id is null.
+type PublicDocument struct {
+	doc    Document
+	system map[string]struct{}
+}
+
+func publicDocument(doc Document, systemMaterialIDs map[string]struct{}) PublicDocument {
+	return PublicDocument{doc: doc, system: systemMaterialIDs}
+}
+
+func (d PublicDocument) MarshalJSON() ([]byte, error) {
+	return encodeWire(d.doc.wire(func(id string) *string {
+		if _, ok := d.system[id]; ok {
+			return &id
+		}
+		return nil
+	}))
+}
+
+func (d Document) wire(materialID func(string) *string) wireDocument {
 	body := wireDocument{
 		SchemaVersion: int(d.schemaVersion()),
 		Units:         "in",
@@ -164,7 +188,7 @@ func (d Document) MarshalJSON() ([]byte, error) {
 		body.Pieces[i] = wirePiece{
 			ID:         p.id,
 			Name:       p.name,
-			MaterialID: p.materialID,
+			MaterialID: materialID(p.materialID),
 			RoughCut:   p.roughCut,
 			LengthIn:   json.Number(p.lengthIn),
 			Continuity: wireContinuity{X: p.continuity.x, Y: p.continuity.y, Z: p.continuity.z},
@@ -185,6 +209,10 @@ func (d Document) MarshalJSON() ([]byte, error) {
 			WasteIn:  json.Number(c.waste),
 		}
 	}
+	return body
+}
+
+func encodeWire(body wireDocument) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
@@ -204,7 +232,7 @@ type wireDocument struct {
 type wirePiece struct {
 	ID         string         `json:"id"`
 	Name       string         `json:"name"`
-	MaterialID string         `json:"materialId"`
+	MaterialID *string        `json:"materialId"`
 	RoughCut   bool           `json:"roughCut"`
 	LengthIn   json.Number    `json:"lengthIn"`
 	Continuity wireContinuity `json:"continuity"`

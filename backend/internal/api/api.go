@@ -28,25 +28,28 @@ func (c Caller) UserID() store.UserID       { return c.user }
 // Deps supplies logging, the session check, the user row, the display name, and design writes.
 // New rejects a nil logger or a nil callback.
 type Deps struct {
-	Log            *slog.Logger
-	Authenticate   func(*http.Request) (store.ClerkUserID, error)
-	EnsureUser     func(context.Context, store.ClerkUserID) (store.UserID, error)
-	DisplayName    func(context.Context, store.ClerkUserID) (string, error)
-	Save           func(context.Context, store.UserID, store.Draft) (store.Design, error)
-	Get            func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	List           func(context.Context, store.UserID) ([]store.DesignSummary, error)
-	Delete         func(context.Context, store.UserID, store.DesignID) error
-	Copy           func(context.Context, store.UserID, store.DesignID) (store.Design, error)
-	Publish        func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
-	Unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
-	CreateMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
-	ListMaterials  func(context.Context, store.UserID) ([]store.Material, error)
-	UpdateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
-	DeleteMaterial func(context.Context, store.UserID, store.MaterialID) error
-	CreatePrice    func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
-	ListPrices     func(context.Context, store.UserID) ([]store.Price, error)
-	UpdatePrice    func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
-	DeletePrice    func(context.Context, store.UserID, store.PriceID) error
+	Log                *slog.Logger
+	Authenticate       func(*http.Request) (store.ClerkUserID, error)
+	EnsureUser         func(context.Context, store.ClerkUserID) (store.UserID, error)
+	DisplayName        func(context.Context, store.ClerkUserID) (string, error)
+	PublicName         func(context.Context, store.ClerkUserID) (store.PublicName, error)
+	Save               func(context.Context, store.UserID, store.Draft) (store.Design, error)
+	Get                func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	List               func(context.Context, store.UserID) ([]store.DesignSummary, error)
+	Delete             func(context.Context, store.UserID, store.DesignID) error
+	Copy               func(context.Context, store.UserID, store.DesignID) (store.Design, error)
+	Publish            func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error)
+	Unpublish          func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
+	ListPublicPatterns func(context.Context) ([]store.PatternSummary, error)
+	GetPattern         func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
+	CreateMaterial     func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
+	ListMaterials      func(context.Context, store.UserID) ([]store.Material, error)
+	UpdateMaterial     func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
+	DeleteMaterial     func(context.Context, store.UserID, store.MaterialID) error
+	CreatePrice        func(context.Context, store.UserID, store.PriceKey, store.Cents) (store.Price, error)
+	ListPrices         func(context.Context, store.UserID) ([]store.Price, error)
+	UpdatePrice        func(context.Context, store.UserID, store.PriceID, store.Cents) (store.Price, error)
+	DeletePrice        func(context.Context, store.UserID, store.PriceID) error
 }
 
 // API registers authenticated /v1 routes. New returns it as an http.Handler.
@@ -75,6 +78,9 @@ func New(d Deps) (http.Handler, error) {
 	if d.DisplayName == nil {
 		return nil, errors.New("display name is required")
 	}
+	if d.PublicName == nil {
+		return nil, errors.New("public name is required")
+	}
 	if d.Save == nil {
 		return nil, errors.New("save is required")
 	}
@@ -95,6 +101,12 @@ func New(d Deps) (http.Handler, error) {
 	}
 	if d.Unpublish == nil {
 		return nil, errors.New("unpublish is required")
+	}
+	if d.ListPublicPatterns == nil {
+		return nil, errors.New("list public patterns is required")
+	}
+	if d.GetPattern == nil {
+		return nil, errors.New("get pattern is required")
 	}
 	if d.CreateMaterial == nil {
 		return nil, errors.New("create material is required")
@@ -130,6 +142,8 @@ func New(d Deps) (http.Handler, error) {
 	a.handle("POST /v1/designs/{id}/copy", a.copyDesign)
 	a.handle("POST /v1/designs/{id}/publish", a.publishDesign)
 	a.handle("POST /v1/designs/{id}/unpublish", a.unpublishDesign)
+	a.handle("GET /v1/patterns", a.listPatterns)
+	a.handle("GET /v1/patterns/{id}", a.getPattern)
 	a.handle("POST /v1/materials", a.createMaterial)
 	a.handle("GET /v1/materials", a.listMaterials)
 	a.handle("PUT /v1/materials/{id}", a.replaceMaterial)

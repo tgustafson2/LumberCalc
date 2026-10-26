@@ -14,6 +14,8 @@ export type MaterialId = Brand<string, "MaterialId">;
 
 export type PriceId = Brand<string, "PriceId">;
 
+export type PatternId = Brand<string, "PatternId">;
+
 export type Me = {
   readonly userId: UserId;
   readonly clerkUserId: ClerkUserId;
@@ -32,6 +34,19 @@ export type DesignSummary = {
 
 export type Design = DesignSummary & {
   readonly document: DesignDocument;
+};
+
+export type PatternSummary = {
+  readonly id: PatternId;
+  readonly name: string;
+  readonly description: string;
+  readonly publisherName: string | null;
+  readonly publishedAt: string;
+};
+
+export type Pattern = PatternSummary & {
+  readonly isPublic: boolean;
+  readonly document: components["schemas"]["PatternDocument"];
 };
 
 export type MaterialWrite = {
@@ -104,6 +119,8 @@ export type V1Client = {
   ) => Promise<V1Result<Design>>;
   readonly deleteDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<null>>;
   readonly copyDesign: (id: DesignId, options?: RequestOptions) => Promise<V1Result<Design>>;
+  readonly listPatterns: (options?: RequestOptions) => Promise<V1Result<readonly PatternSummary[]>>;
+  readonly getPattern: (id: PatternId, options?: RequestOptions) => Promise<V1Result<Pattern>>;
   readonly createMaterial: (body: MaterialWrite, options?: RequestOptions) => Promise<V1Result<Material>>;
   readonly listMaterials: (options?: RequestOptions) => Promise<V1Result<readonly Material[]>>;
   readonly replaceMaterial: (
@@ -179,6 +196,18 @@ export function createV1Client(options: {
         (headers) =>
           http.POST("/v1/designs/{id}/copy", { params: { path: { id } }, signal, headers }),
         toDesign,
+      ),
+    listPatterns: ({ signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.GET("/v1/patterns", { signal, headers }),
+        toPatternList,
+      ),
+    getPattern: (id, { signal } = {}) =>
+      send(
+        options.getToken,
+        (headers) => http.GET("/v1/patterns/{id}", { params: { path: { id } }, signal, headers }),
+        toPattern,
       ),
     createMaterial: (body, { signal } = {}) =>
       send(
@@ -313,6 +342,55 @@ function toSummary(wire: Wire["DesignSummary"]): Parsed<DesignSummary> {
       description: wire.description,
       version: wire.version,
       updatedAt,
+    },
+  };
+}
+
+function toPattern(wire: Wire["Pattern"]): Parsed<Pattern> {
+  const summary = toPatternSummary(wire);
+  if (summary.kind !== "ok" || typeof wire.isPublic !== "boolean" || wire.document === undefined) {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "ok",
+    value: { ...summary.value, isPublic: wire.isPublic, document: wire.document },
+  };
+}
+
+function toPatternList(wire: readonly Wire["PatternSummary"][]): Parsed<readonly PatternSummary[]> {
+  const values: PatternSummary[] = [];
+  for (const item of wire) {
+    const summary = toPatternSummary(item);
+    if (summary.kind !== "ok") {
+      return summary;
+    }
+    values.push(summary.value);
+  }
+  return { kind: "ok", value: values };
+}
+
+function toPatternSummary(wire: Wire["PatternSummary"]): Parsed<PatternSummary> {
+  const id = text(wire.id);
+  const name = text(wire.name);
+  const publishedAt = text(wire.publishedAt);
+  const publisherName = wire.publisherName === null ? null : text(wire.publisherName);
+  if (
+    id === null ||
+    name === null ||
+    publishedAt === null ||
+    (publisherName === null && wire.publisherName !== null) ||
+    typeof wire.description !== "string"
+  ) {
+    return { kind: "invalid" };
+  }
+  return {
+    kind: "ok",
+    value: {
+      id: id as PatternId,
+      name,
+      description: wire.description,
+      publisherName,
+      publishedAt,
     },
   };
 }

@@ -31,10 +31,6 @@ func ParseDesignID(raw string) (DesignID, error) {
 
 func (id DesignID) String() string { return formatUUID(id.v) }
 
-type PatternID struct{ v [16]byte }
-
-func (id PatternID) String() string { return formatUUID(id.v) }
-
 type Name struct{ s string }
 
 // ParseName rejects a blank name.
@@ -204,7 +200,8 @@ func (s *Store) Delete(ctx context.Context, owner UserID, id DesignID) error {
 	return nil
 }
 
-func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID) (PatternID, error) {
+// Publish refreshes the name, the document, and updated_at on a second call, and keeps the pattern id.
+func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID, publisher PublicName) (PatternID, error) {
 	var patternID PatternID
 	err := s.withTx(ctx, func(qtx *q.Queries) error {
 		locked, err := qtx.LockLiveDesign(ctx, q.LockLiveDesignParams{
@@ -225,8 +222,9 @@ func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID) (Pattern
 			return ErrEmptyDesign
 		}
 		raw, err := qtx.UpsertPatternFromDesign(ctx, q.UpsertPatternFromDesignParams{
-			ID:      locked.ID,
-			OwnerID: locked.OwnerID,
+			PublisherName: publicNamePG(publisher),
+			ID:            locked.ID,
+			OwnerID:       locked.OwnerID,
 		})
 		if err != nil {
 			return err

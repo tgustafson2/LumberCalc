@@ -28,6 +28,9 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		DisplayName: func(context.Context, store.ClerkUserID) (string, error) {
 			return "", nil
 		},
+		PublicName: func(context.Context, store.ClerkUserID) (store.PublicName, error) {
+			return store.PublicName{}, nil
+		},
 		Save: func(context.Context, store.UserID, store.Draft) (store.Design, error) {
 			return store.Design{}, store.ErrNotFound
 		},
@@ -43,11 +46,17 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		Copy: func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
 			return store.Design{}, store.ErrNotFound
 		},
-		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		Publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			return store.PatternID{}, store.ErrNotFound
 		},
 		Unpublish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
 			return store.PatternID{}, store.ErrNotFound
+		},
+		ListPublicPatterns: func(context.Context) ([]store.PatternSummary, error) {
+			return []store.PatternSummary{}, nil
+		},
+		GetPattern: func(context.Context, store.UserID, store.PatternID) (store.Pattern, error) {
+			return store.Pattern{}, store.ErrPatternNotFound
 		},
 		CreateMaterial: func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
 			return store.Material{}, store.ErrMaterialNotFound

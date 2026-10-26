@@ -215,7 +215,7 @@ func materialHandler(
 			t.Fatal("copy was called")
 			return store.Design{}, nil
 		},
-		Publish: func(context.Context, store.UserID, store.DesignID) (store.PatternID, error) {
+		Publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
 			t.Fatal("publish was called")
 			return store.PatternID{}, nil
 		},
@@ -223,14 +223,17 @@ func materialHandler(
 			t.Fatal("unpublish was called")
 			return store.PatternID{}, nil
 		},
-		CreateMaterial: create,
-		ListMaterials:  list,
-		UpdateMaterial: update,
-		DeleteMaterial: del,
-		CreatePrice:    idleCreatePrice,
-		ListPrices:     idleListPrices,
-		UpdatePrice:    idleUpdatePrice,
-		DeletePrice:    idleDeletePrice,
+		CreateMaterial:     create,
+		ListMaterials:      list,
+		UpdateMaterial:     update,
+		DeleteMaterial:     del,
+		CreatePrice:        idleCreatePrice,
+		ListPrices:         idleListPrices,
+		UpdatePrice:        idleUpdatePrice,
+		DeletePrice:        idleDeletePrice,
+		PublicName:         idlePublicName,
+		ListPublicPatterns: idleListPublicPatterns,
+		GetPattern:         idleGetPattern,
 	})
 	if err != nil {
 		t.Fatal(err)

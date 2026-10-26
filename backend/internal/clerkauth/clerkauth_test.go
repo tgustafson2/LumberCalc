@@ -14,8 +14,11 @@ import (
 	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	"github.com/clerk/clerk-sdk-go/v2/user"
 	"github.com/go-jose/go-jose/v3"
 	"github.com/go-jose/go-jose/v3/jwt"
+
+	"lumbercalc/backend/internal/store"
 )
 
 const (
@@ -279,6 +282,88 @@ func TestFormatDisplayName(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPublicNameOmitsTheEmailAndTheSubject(t *testing.T) {
+	sub, err := store.ParseClerkUserID(testSub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name        string
+		profile     string
+		display     string
+		publicName  string
+		publicIsSet bool
+	}{
+		{
+			name:        "full name",
+			profile:     `{"id":"` + testSub + `","first_name":"Ada","last_name":"Lovelace","username":"ada"}`,
+			display:     "Ada Lovelace",
+			publicName:  "Ada Lovelace",
+			publicIsSet: true,
+		},
+		{
+			name:    "email only",
+			profile: `{"id":"` + testSub + `","primary_email_address_id":"idn_1","email_addresses":[{"id":"idn_1","email_address":"ada@example.com"}]}`,
+			display: "ada@example.com",
+		},
+		{
+			name:    "username is the subject",
+			profile: `{"id":"` + testSub + `","username":"` + testSub + `"}`,
+			display: testSub,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := clerkWithProfile(t, http.StatusOK, tc.profile)
+			display, err := c.DisplayName(context.Background(), sub)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if display != tc.display {
+				t.Fatalf("display name = %q, want %q", display, tc.display)
+			}
+			public, err := c.PublicName(context.Background(), sub)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, ok := public.Value()
+			if ok != tc.publicIsSet || got != tc.publicName {
+				t.Fatalf("public name = %q, %v, want %q, %v", got, ok, tc.publicName, tc.publicIsSet)
+			}
+		})
+	}
+}
+
+func TestPublicNameReturnsAClerkError(t *testing.T) {
+	sub, err := store.ParseClerkUserID(testSub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := clerkWithProfile(t, http.StatusInternalServerError, `{"errors":[{"code":"internal","message":"down"}]}`)
+	if _, err := c.PublicName(context.Background(), sub); err == nil {
+		t.Fatal("err = nil, want the Clerk error")
+	}
+}
+
+func clerkWithProfile(t *testing.T, status int, body string) *Clerk {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/users/"+testSub) {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(srv.Close)
+	cfg := &clerk.ClientConfig{}
+	cfg.Key = clerk.String("sk_test_replace_me")
+	cfg.URL = clerk.String(srv.URL)
+	cfg.HTTPClient = srv.Client()
+	return &Clerk{users: user.NewClient(cfg)}
 }
 
 func newTestClerk(t *testing.T, fetch keyFetch) (*Clerk, *bytes.Buffer) {

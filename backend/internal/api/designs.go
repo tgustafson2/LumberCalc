@@ -142,7 +142,12 @@ func (a *API) publishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	patternID, err := a.d.Publish(r.Context(), c.UserID(), id)
+	publisher, err := a.d.PublicName(r.Context(), c.ClerkID())
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	patternID, err := a.d.Publish(r.Context(), c.UserID(), id, publisher)
 	if err != nil {
 		a.writeDesignErr(w, r, err)
 		return

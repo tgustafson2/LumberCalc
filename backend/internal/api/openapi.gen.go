@@ -115,6 +115,37 @@ type Me struct {
 	UserId      string `json:"user_id"`
 }
 
+// Pattern defines model for Pattern.
+type Pattern struct {
+	Description string `json:"description"`
+
+	// Document The published design document. A piece keeps materialId only when it is a system material. Any other materialId is null.
+	Document PatternDocument `json:"document"`
+	Id       string          `json:"id"`
+
+	// IsPublic False only when the caller is the publisher and the pattern is private.
+	IsPublic    bool      `json:"isPublic"`
+	Name        string    `json:"name"`
+	PublishedAt time.Time `json:"publishedAt"`
+
+	// PublisherName The publisher name stored at the last publish. Null when no safe name was stored.
+	PublisherName *string `json:"publisherName"`
+}
+
+// PatternDocument The published design document. A piece keeps materialId only when it is a system material. Any other materialId is null.
+type PatternDocument = store.PublicDocument
+
+// PatternSummary defines model for PatternSummary.
+type PatternSummary struct {
+	Description string    `json:"description"`
+	Id          string    `json:"id"`
+	Name        string    `json:"name"`
+	PublishedAt time.Time `json:"publishedAt"`
+
+	// PublisherName The publisher name stored at the last publish. Null when no safe name was stored.
+	PublisherName *string `json:"publisherName"`
+}
+
 // Price defines model for Price.
 type Price struct {
 	Id string `json:"id"`
