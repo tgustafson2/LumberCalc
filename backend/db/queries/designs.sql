@@ -60,14 +60,16 @@ INSERT INTO designs (
     description,
     schema_version,
     document,
-    copied_from_design_id
+    copied_from_design_id,
+    copied_from_pattern_id
 ) VALUES (
     sqlc.arg('owner_id'),
     sqlc.arg('name'),
     sqlc.arg('description'),
     sqlc.arg('schema_version'),
     sqlc.arg('document'),
-    sqlc.arg('copied_from_design_id')
+    sqlc.narg('copied_from_design_id'),
+    sqlc.narg('copied_from_pattern_id')
 )
 RETURNING *;
 

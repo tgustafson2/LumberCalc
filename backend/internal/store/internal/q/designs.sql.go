@@ -62,25 +62,28 @@ INSERT INTO designs (
     description,
     schema_version,
     document,
-    copied_from_design_id
+    copied_from_design_id,
+    copied_from_pattern_id
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
 )
 RETURNING id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
 `
 
 type InsertCopiedDesignParams struct {
-	OwnerID            pgtype.UUID
-	Name               string
-	Description        string
-	SchemaVersion      int32
-	Document           json.RawMessage
-	CopiedFromDesignID pgtype.UUID
+	OwnerID             pgtype.UUID
+	Name                string
+	Description         string
+	SchemaVersion       int32
+	Document            json.RawMessage
+	CopiedFromDesignID  pgtype.UUID
+	CopiedFromPatternID pgtype.UUID
 }
 
 func (q *Queries) InsertCopiedDesign(ctx context.Context, arg InsertCopiedDesignParams) (Design, error) {
@@ -91,6 +94,7 @@ func (q *Queries) InsertCopiedDesign(ctx context.Context, arg InsertCopiedDesign
 		arg.SchemaVersion,
 		arg.Document,
 		arg.CopiedFromDesignID,
+		arg.CopiedFromPatternID,
 	)
 	var i Design
 	err := row.Scan(

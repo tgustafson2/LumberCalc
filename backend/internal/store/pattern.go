@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -99,12 +97,9 @@ func patternFromRow(row q.GetVisiblePatternRow) (Pattern, error) {
 	if err != nil {
 		return Pattern{}, err
 	}
-	var doc Document
-	if err := json.Unmarshal(row.Document, &doc); err != nil {
-		return Pattern{}, fmt.Errorf("stored pattern document is invalid: %v", err)
-	}
-	if row.SchemaVersion != doc.schemaVersion() {
-		return Pattern{}, fmt.Errorf("pattern schema_version %d does not match document", row.SchemaVersion)
+	doc, err := parseStored("pattern", row.Document, row.SchemaVersion)
+	if err != nil {
+		return Pattern{}, err
 	}
 	system := make(map[string]struct{}, len(row.SystemMaterialIds))
 	for _, id := range row.SystemMaterialIds {

@@ -300,26 +300,8 @@ func (s *Store) Copy(ctx context.Context, owner UserID, id DesignID) (Design, er
 		if err != nil {
 			return err
 		}
-		cloned, err := source.Document.fork()
-		if err != nil {
-			return err
-		}
-		raw, err := json.Marshal(cloned)
-		if err != nil {
-			return err
-		}
-		row, err = qtx.InsertCopiedDesign(ctx, q.InsertCopiedDesignParams{
-			OwnerID:            uuidPG(owner.v),
-			Name:               copyName(source.Name).String(),
-			Description:        source.Description,
-			SchemaVersion:      cloned.schemaVersion(),
-			Document:           raw,
-			CopiedFromDesignID: uuidPG(source.ID.v),
-		})
-		if err != nil {
-			return err
-		}
-		return insertUsages(ctx, qtx, owner, row.ID, cloned.materialIDs())
+		row, err = insertClone(ctx, qtx, owner, copyName(source.Name), source.Description, source.Document, fromDesign(source.ID))
+		return err
 	})
 	if err != nil {
 		return Design{}, err
@@ -330,6 +312,54 @@ func (s *Store) Copy(ctx context.Context, owner UserID, id DesignID) (Design, er
 // copyName is the only copy title. Names are not unique, so a repeated copy keeps this title.
 func copyName(source Name) Name {
 	return Name{s: source.s + " copy"}
+}
+
+// cloneSource is the one lineage column that a cloned design sets.
+// fromDesign and fromPattern are the only sources, so a clone never sets both columns.
+type cloneSource interface {
+	copiedFrom() (design, pattern pgtype.UUID)
+}
+
+type fromDesign DesignID
+type fromPattern PatternID
+
+func (s fromDesign) copiedFrom() (design, pattern pgtype.UUID) {
+	return uuidPG(s.v), pgtype.UUID{}
+}
+
+func (s fromPattern) copiedFrom() (design, pattern pgtype.UUID) {
+	return pgtype.UUID{}, uuidPG(s.v)
+}
+
+// insertClone writes a version 1 design that owner owns, with new piece and connection ids,
+// and its usage rows, in the transaction of qtx.
+// A material that owner cannot use is ErrMaterialUnusable. The caller's transaction then rolls back.
+func insertClone(ctx context.Context, qtx *q.Queries, owner UserID, name Name, description string, source Document, from cloneSource) (q.Design, error) {
+	cloned, err := source.fork()
+	if err != nil {
+		return q.Design{}, err
+	}
+	raw, err := json.Marshal(cloned)
+	if err != nil {
+		return q.Design{}, err
+	}
+	design, pattern := from.copiedFrom()
+	row, err := qtx.InsertCopiedDesign(ctx, q.InsertCopiedDesignParams{
+		OwnerID:             uuidPG(owner.v),
+		Name:                name.String(),
+		Description:         description,
+		SchemaVersion:       cloned.schemaVersion(),
+		Document:            raw,
+		CopiedFromDesignID:  design,
+		CopiedFromPatternID: pattern,
+	})
+	if err != nil {
+		return q.Design{}, err
+	}
+	if err := insertUsages(ctx, qtx, owner, row.ID, cloned.materialIDs()); err != nil {
+		return q.Design{}, err
+	}
+	return row, nil
 }
 
 func insertUsages(ctx context.Context, qtx *q.Queries, owner UserID, designID pgtype.UUID, ids []MaterialID) error {
@@ -354,16 +384,25 @@ func designFromRow(row q.Design) (Design, error) {
 	if err != nil {
 		return Design{}, err
 	}
-	var doc Document
-	if err := json.Unmarshal(row.Document, &doc); err != nil {
-		// A stored document that does not parse is a server fault.
-		// Do not wrap DocumentError. The handler maps that type to 400.
-		return Design{}, fmt.Errorf("stored design document is invalid: %v", err)
-	}
-	if row.SchemaVersion != doc.schemaVersion() {
-		return Design{}, fmt.Errorf("design schema_version %d does not match document", row.SchemaVersion)
+	doc, err := parseStored("design", row.Document, row.SchemaVersion)
+	if err != nil {
+		return Design{}, err
 	}
 	return Design{DesignSummary: summary, Document: doc}, nil
+}
+
+// parseStored parses a document that the store wrote earlier.
+// A document that does not parse, or a schema_version that does not match, is a server fault.
+// The error does not wrap DocumentError, because the handler maps that type to 400.
+func parseStored(kind string, raw []byte, schemaVersion int32) (Document, error) {
+	var doc Document
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return Document{}, fmt.Errorf("stored %s document is invalid: %v", kind, err)
+	}
+	if schemaVersion != doc.schemaVersion() {
+		return Document{}, fmt.Errorf("%s schema_version %d does not match document", kind, schemaVersion)
+	}
+	return doc, nil
 }
 
 func summaryFromRow(id pgtype.UUID, name, description string, version int32, updated pgtype.Timestamptz) (DesignSummary, error) {
