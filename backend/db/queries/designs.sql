@@ -92,6 +92,15 @@ WHERE id = sqlc.arg('id')
 DELETE FROM design_material_usages
 WHERE design_id = sqlc.arg('design_id');
 
+-- name: FirstNonSystemMaterial :one
+SELECT t.id::uuid AS id
+FROM unnest(sqlc.arg('ids')::uuid[]) AS t(id)
+WHERE NOT EXISTS (
+    SELECT 1 FROM materials m
+    WHERE m.id = t.id AND m.owner_id IS NULL
+)
+LIMIT 1;
+
 -- name: InsertDesignUsageForUsableMaterial :execrows
 INSERT INTO design_material_usages (design_id, material_id)
 SELECT sqlc.arg('design_id')::uuid, m.id

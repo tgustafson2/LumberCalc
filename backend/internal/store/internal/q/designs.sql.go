@@ -22,6 +22,23 @@ func (q *Queries) DeleteDesignUsages(ctx context.Context, designID pgtype.UUID) 
 	return err
 }
 
+const firstNonSystemMaterial = `-- name: FirstNonSystemMaterial :one
+SELECT t.id::uuid AS id
+FROM unnest($1::uuid[]) AS t(id)
+WHERE NOT EXISTS (
+    SELECT 1 FROM materials m
+    WHERE m.id = t.id AND m.owner_id IS NULL
+)
+LIMIT 1
+`
+
+func (q *Queries) FirstNonSystemMaterial(ctx context.Context, ids []pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, firstNonSystemMaterial, ids)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLiveDesign = `-- name: GetLiveDesign :one
 SELECT id, owner_id, name, description, schema_version, document, version, copied_from_design_id, copied_from_pattern_id, created_at, updated_at, deleted_at
 FROM designs

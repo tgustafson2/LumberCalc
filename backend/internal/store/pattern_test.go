@@ -48,7 +48,7 @@ func TestListPublicPatternsOmitsHiddenPatterns(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 
 	empty, err := s.ListPublicPatterns(ctx)
 	if err != nil {
@@ -92,7 +92,7 @@ func TestGetPatternHidesAPrivatePatternFromAStranger(t *testing.T) {
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
 	stranger := testUser(t, s, "user_stranger")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	design := savedDesign(t, s, owner, "Bench", pine)
 	patternID, err := s.Publish(ctx, owner, design.ID, store.PublicName{})
 	if err != nil {
@@ -137,10 +137,31 @@ func TestGetPatternSendsOnlySystemMaterialIDs(t *testing.T) {
 	stranger := testUser(t, s, "user_stranger")
 	system := insertSystemMaterial(t, pool, "test 2x4")
 	private := insertMaterial(t, pool, owner, "pine")
-	design := savedDesign(t, s, owner, "Bench", system, private)
+	design := savedDesign(t, s, owner, "Bench", system, system)
 	patternID, err := s.Publish(ctx, owner, design.ID, store.PublicName{})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       design.ID,
+		Name:     design.Name,
+		Document: testDocument(t, system, private),
+		Base:     design.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Publish rejects a custom material, so a mixed snapshot is only a legacy row.
+	tag, err := pool.Exec(ctx, `
+		UPDATE patterns p
+		SET document = d.document
+		FROM designs d
+		WHERE p.id = $1 AND d.id = p.source_design_id
+	`, patternID.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("updated rows = %d", tag.RowsAffected())
 	}
 
 	got, err := s.GetPattern(ctx, stranger, patternID)
@@ -192,7 +213,7 @@ func TestPublishStoresThePublisherName(t *testing.T) {
 		t.Fatal(err)
 	}
 	owner := testUser(t, s, subject.String())
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	design := savedDesign(t, s, owner, "Bench", pine)
 
 	patternID, err := s.Publish(ctx, owner, design.ID, store.ParsePublicName("  ", subject))
@@ -234,7 +255,7 @@ func TestDeleteSetsThePatternPrivateAndKeepsUpdatedAt(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	design := savedDesign(t, s, owner, "Bench", pine)
 	patternID, err := s.Publish(ctx, owner, design.ID, store.PublicName{})
 	if err != nil {

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -339,6 +340,19 @@ func TestPublishDesignReturnsEmptyDesign(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
 	}
 	if !bytes.Equal(bytes.TrimSpace(rr.Body.Bytes()), []byte(`{"error":"empty_design"}`)) {
+		t.Fatalf("body = %s", rr.Body.Bytes())
+	}
+}
+
+func TestPublishDesignReturnsCustomMaterial(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
+		return store.PatternID{}, fmt.Errorf("%w: %s", store.ErrCustomMaterial, otherID)
+	}, nil)
+	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Equal(bytes.TrimSpace(rr.Body.Bytes()), []byte(`{"error":"custom_material"}`)) {
 		t.Fatalf("body = %s", rr.Body.Bytes())
 	}
 }

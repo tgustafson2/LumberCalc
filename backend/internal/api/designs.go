@@ -16,6 +16,8 @@ const staleVersionMessage = "stale version"
 
 const emptyDesignToken = "empty_design"
 
+const customMaterialToken = "custom_material"
+
 type designEnvelope struct {
 	Name        json.RawMessage `json:"name"`
 	Description json.RawMessage `json:"description"`
@@ -278,6 +280,8 @@ func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) 
 	switch {
 	case errors.Is(err, store.ErrEmptyDesign):
 		server.WriteJSON(w, http.StatusBadRequest, server.Error{Error: emptyDesignToken})
+	case errors.Is(err, store.ErrCustomMaterial):
+		server.WriteJSON(w, http.StatusBadRequest, server.Error{Error: customMaterialToken})
 	case errors.Is(err, store.ErrStale):
 		server.WriteJSON(w, http.StatusConflict, server.Error{Error: staleVersionMessage})
 	case errors.Is(err, store.ErrMaterialUnusable):

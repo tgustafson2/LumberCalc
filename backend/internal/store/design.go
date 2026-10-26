@@ -84,6 +84,8 @@ var (
 	ErrBlankName   = errors.New("design name is blank")
 	ErrStale       = errors.New("stale version")
 	ErrEmptyDesign = errors.New("empty design")
+	// ErrCustomMaterial is a publish of a document that names a material that is not a system material.
+	ErrCustomMaterial = errors.New("design names a material that is not a system material")
 )
 
 func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, error) {
@@ -220,6 +222,13 @@ func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID, publishe
 		}
 		if design.Document.empty() {
 			return ErrEmptyDesign
+		}
+		bad, err := qtx.FirstNonSystemMaterial(ctx, uuidsPG(design.Document.materialIDs()))
+		if err == nil {
+			return fmt.Errorf("%w: %s", ErrCustomMaterial, formatUUID(bad.Bytes))
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return err
 		}
 		raw, err := qtx.UpsertPatternFromDesign(ctx, q.UpsertPatternFromDesignParams{
 			PublisherName: publicNamePG(publisher),
@@ -430,4 +439,12 @@ func usageErr(err error) error {
 
 func uuidPG(v [16]byte) pgtype.UUID {
 	return pgtype.UUID{Bytes: v, Valid: true}
+}
+
+func uuidsPG(ids []MaterialID) []pgtype.UUID {
+	out := make([]pgtype.UUID, len(ids))
+	for i, id := range ids {
+		out[i] = uuidPG(id.v)
+	}
+	return out
 }
