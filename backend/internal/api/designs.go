@@ -16,6 +16,8 @@ const staleVersionMessage = "stale version"
 
 const emptyDesignToken = "empty_design"
 
+const customMaterialToken = "custom_material"
+
 type designEnvelope struct {
 	Name        json.RawMessage `json:"name"`
 	Description json.RawMessage `json:"description"`
@@ -47,8 +49,7 @@ func (a *API) createDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	w.Header().Set("Location", "/v1/designs/"+design.ID.String())
-	server.WriteJSON(w, http.StatusCreated, toDesign(design))
+	writeCreatedDesign(w, design)
 }
 
 func (a *API) listDesigns(w http.ResponseWriter, r *http.Request, c Caller) {
@@ -128,8 +129,12 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 		a.writeDesignErr(w, r, err)
 		return
 	}
-	w.Header().Set("Location", "/v1/designs/"+design.ID.String())
-	server.WriteJSON(w, http.StatusCreated, toDesign(design))
+	writeCreatedDesign(w, design)
+}
+
+func writeCreatedDesign(w http.ResponseWriter, d store.Design) {
+	w.Header().Set("Location", "/v1/designs/"+d.ID.String())
+	server.WriteJSON(w, http.StatusCreated, toDesign(d))
 }
 
 func (a *API) publishDesign(w http.ResponseWriter, r *http.Request, c Caller) {
@@ -278,6 +283,8 @@ func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) 
 	switch {
 	case errors.Is(err, store.ErrEmptyDesign):
 		server.WriteJSON(w, http.StatusBadRequest, server.Error{Error: emptyDesignToken})
+	case errors.Is(err, store.ErrCustomMaterial):
+		server.WriteJSON(w, http.StatusBadRequest, server.Error{Error: customMaterialToken})
 	case errors.Is(err, store.ErrStale):
 		server.WriteJSON(w, http.StatusConflict, server.Error{Error: staleVersionMessage})
 	case errors.Is(err, store.ErrMaterialUnusable):
@@ -290,7 +297,7 @@ func (a *API) writeDesignErr(w http.ResponseWriter, r *http.Request, err error) 
 func designStatus(err error) int {
 	var docErr *store.DocumentError
 	switch {
-	case errors.Is(err, store.ErrBadDesignID), errors.Is(err, store.ErrNotFound):
+	case errors.Is(err, store.ErrBadDesignID), errors.Is(err, store.ErrNotFound), errors.Is(err, store.ErrPatternNotFound):
 		return http.StatusNotFound
 	case errors.Is(err, store.ErrBlankName), errors.Is(err, errBadBody), errors.Is(err, store.ErrEmptyDesign), errors.As(err, &docErr):
 		return http.StatusBadRequest

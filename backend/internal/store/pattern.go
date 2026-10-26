@@ -2,9 +2,7 @@ package store
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -94,17 +92,37 @@ func (s *Store) GetPattern(ctx context.Context, viewer UserID, id PatternID) (Pa
 	return patternFromRow(row)
 }
 
+func (s *Store) AddPattern(ctx context.Context, owner UserID, id PatternID) (Design, error) {
+	var row q.Design
+	err := s.withTx(ctx, func(qtx *q.Queries) error {
+		snap, err := qtx.LockPublicPattern(ctx, uuidPG(id.v))
+		if errors.Is(err, pgx.ErrNoRows) {
+			return ErrPatternNotFound
+		}
+		if err != nil {
+			return err
+		}
+		doc, err := parseStored("pattern", snap.Document, snap.SchemaVersion)
+		if err != nil {
+			return err
+		}
+		row, err = insertClone(ctx, qtx, owner, Name{s: snap.Name}, snap.Description, doc, fromPattern(id))
+		return err
+	})
+	if err != nil {
+		return Design{}, err
+	}
+	return designFromRow(row)
+}
+
 func patternFromRow(row q.GetVisiblePatternRow) (Pattern, error) {
 	summary, err := patternSummaryFromRow(row.ID, row.Name, row.Description, row.PublisherName, row.UpdatedAt)
 	if err != nil {
 		return Pattern{}, err
 	}
-	var doc Document
-	if err := json.Unmarshal(row.Document, &doc); err != nil {
-		return Pattern{}, fmt.Errorf("stored pattern document is invalid: %v", err)
-	}
-	if row.SchemaVersion != doc.schemaVersion() {
-		return Pattern{}, fmt.Errorf("pattern schema_version %d does not match document", row.SchemaVersion)
+	doc, err := parseStored("pattern", row.Document, row.SchemaVersion)
+	if err != nil {
+		return Pattern{}, err
 	}
 	system := make(map[string]struct{}, len(row.SystemMaterialIds))
 	for _, id := range row.SystemMaterialIds {

@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -343,6 +344,19 @@ func TestPublishDesignReturnsEmptyDesign(t *testing.T) {
 	}
 }
 
+func TestPublishDesignReturnsCustomMaterial(t *testing.T) {
+	h := designHandler(t, nil, nil, nil, nil, nil, func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
+		return store.PatternID{}, fmt.Errorf("%w: %s", store.ErrCustomMaterial, otherID)
+	}, nil)
+	rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/publish", "")
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+	}
+	if !bytes.Equal(bytes.TrimSpace(rr.Body.Bytes()), []byte(`{"error":"custom_material"}`)) {
+		t.Fatalf("body = %s", rr.Body.Bytes())
+	}
+}
+
 func TestUnpublishDesignReturns200(t *testing.T) {
 	const want = `{"id":"00000000-0000-0000-0000-000000000000"}`
 	h := designHandler(t, nil, nil, nil, nil, nil, nil, func(_ context.Context, _ store.UserID, id store.DesignID) (store.PatternID, error) {
@@ -489,6 +503,7 @@ func designHandlerWithLog(
 		PublicName:         idlePublicName,
 		ListPublicPatterns: idleListPublicPatterns,
 		GetPattern:         idleGetPattern,
+		AddPattern:         idleAddPattern,
 	})
 	if err != nil {
 		t.Fatal(err)

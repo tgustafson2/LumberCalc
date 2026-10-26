@@ -44,6 +44,24 @@ func (a *API) getPattern(w http.ResponseWriter, r *http.Request, c Caller) {
 	})
 }
 
+func (a *API) addPattern(w http.ResponseWriter, r *http.Request, c Caller) {
+	id, err := store.ParsePatternID(r.PathValue("id"))
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	if err := rejectRequestBody(r.Body); err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	design, err := a.d.AddPattern(r.Context(), c.UserID(), id)
+	if err != nil {
+		a.writeDesignErr(w, r, err)
+		return
+	}
+	writeCreatedDesign(w, design)
+}
+
 func (a *API) writePatternErr(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, store.ErrPatternNotFound) {
 		server.WriteError(w, http.StatusNotFound)

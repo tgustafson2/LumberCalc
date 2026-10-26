@@ -60,14 +60,16 @@ INSERT INTO designs (
     description,
     schema_version,
     document,
-    copied_from_design_id
+    copied_from_design_id,
+    copied_from_pattern_id
 ) VALUES (
     sqlc.arg('owner_id'),
     sqlc.arg('name'),
     sqlc.arg('description'),
     sqlc.arg('schema_version'),
     sqlc.arg('document'),
-    sqlc.arg('copied_from_design_id')
+    sqlc.narg('copied_from_design_id'),
+    sqlc.narg('copied_from_pattern_id')
 )
 RETURNING *;
 
@@ -89,6 +91,15 @@ WHERE id = sqlc.arg('id')
 -- name: DeleteDesignUsages :exec
 DELETE FROM design_material_usages
 WHERE design_id = sqlc.arg('design_id');
+
+-- name: FirstNonSystemMaterial :one
+SELECT t.id::uuid AS id
+FROM unnest(sqlc.arg('ids')::uuid[]) AS t(id)
+WHERE NOT EXISTS (
+    SELECT 1 FROM materials m
+    WHERE m.id = t.id AND m.owner_id IS NULL
+)
+LIMIT 1;
 
 -- name: InsertDesignUsageForUsableMaterial :execrows
 INSERT INTO design_material_usages (design_id, material_id)

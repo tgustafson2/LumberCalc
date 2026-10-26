@@ -174,6 +174,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/patterns/{id}/add": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["addPattern"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/materials": {
         parameters: {
             query?: never;
@@ -930,7 +948,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublishedPattern"];
                 };
             };
-            /** @description The request has a body, or the design has zero pieces. */
+            /** @description The request has a body, the design has zero pieces (empty_design), or the design names a material that is not a system material (custom_material). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -1107,6 +1125,75 @@ export interface operations {
                 };
             };
             /** @description The pattern was not loaded. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    addPattern: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A new design that the caller owns. It has the pattern name, description, and document, new piece and connection ids, and version 1. */
+            201: {
+                headers: {
+                    Location: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Design"];
+                };
+            };
+            /** @description The request has a body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request has no valid session. */
+            401: {
+                headers: {
+                    "WWW-Authenticate": "Bearer";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The id is not a uuid, no pattern has this id, or the pattern is private. This includes the publisher. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The pattern names a material the caller cannot use. The error is material not available. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The pattern was not added. */
             500: {
                 headers: {
                     [name: string]: unknown;

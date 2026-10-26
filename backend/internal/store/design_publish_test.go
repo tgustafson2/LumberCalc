@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +19,8 @@ func TestPublishInsertsOnePattern(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
-	oak := insertMaterial(t, pool, owner, "oak")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	oak := insertSystemMaterial(t, pool, "test oak")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -82,8 +83,8 @@ func TestPublishAgainKeepsTheID(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
-	oak := insertMaterial(t, pool, owner, "oak")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	oak := insertSystemMaterial(t, pool, "test oak")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -178,8 +179,8 @@ func TestSaveAfterPublishLeavesThePatternDocument(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
-	oak := insertMaterial(t, pool, owner, "oak")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	oak := insertSystemMaterial(t, pool, "test oak")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -257,12 +258,77 @@ func TestPublishEmptyDesignWritesNoPattern(t *testing.T) {
 	}
 }
 
+func TestPublishRejectsACustomMaterial(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	custom := insertMaterial(t, pool, owner, "pine")
+	name, err := store.ParseName("Bench")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	first, err := s.Save(ctx, owner, store.CreateDraft{Name: name, Document: testDocument(t, pine, custom)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Publish(ctx, owner, first.ID, store.PublicName{})
+	if !errors.Is(err, store.ErrCustomMaterial) || !strings.Contains(err.Error(), custom) {
+		t.Fatalf("first publish err = %v, want ErrCustomMaterial with %s", err, custom)
+	}
+	if n := patternCount(t, pool, first.ID); n != 0 {
+		t.Fatalf("patterns = %d, want 0", n)
+	}
+
+	created, err := s.Save(ctx, owner, store.CreateDraft{Name: name, Document: testDocument(t, pine)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish(ctx, owner, created.ID, store.PublicName{}); err != nil {
+		t.Fatal(err)
+	}
+	published := mustPattern(t, pool, created.ID)
+	if _, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     name,
+		Document: testDocument(t, pine, custom),
+		Base:     created.Version,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Publish(ctx, owner, created.ID, store.PublicName{}); !errors.Is(err, store.ErrCustomMaterial) {
+		t.Fatalf("republish err = %v, want ErrCustomMaterial", err)
+	}
+	row := mustPattern(t, pool, created.ID)
+	if !patternDocumentEquals(t, pool, row.id, published.document) || !row.updatedAt.Equal(published.updatedAt) {
+		t.Fatalf("pattern changed: updated_at = %s, want %s", row.updatedAt, published.updatedAt)
+	}
+
+	const missing = "00000000-0000-4000-8000-0000000000ff"
+	raw, err := json.Marshal(testDocument(t, pine, missing))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE designs SET document = $2 WHERE id = $1`, created.ID.String(), raw); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Publish(ctx, owner, created.ID, store.PublicName{})
+	if !errors.Is(err, store.ErrCustomMaterial) || !strings.Contains(err.Error(), missing) {
+		t.Fatalf("missing material err = %v, want ErrCustomMaterial with %s", err, missing)
+	}
+	if row := mustPattern(t, pool, created.ID); !patternDocumentEquals(t, pool, row.id, published.document) {
+		t.Fatal("pattern document changed")
+	}
+}
+
 func TestPublishEmptyAfterSaveLeavesThePattern(t *testing.T) {
 	pool := dbtest.Migrated(t)
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -307,7 +373,7 @@ func TestPublishNotFoundLeavesThePattern(t *testing.T) {
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
 	other := testUser(t, s, "user_other")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -360,7 +426,7 @@ func TestPublishSetsIsPublicTrue(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -407,7 +473,7 @@ func TestPublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -503,7 +569,7 @@ func TestUnpublishSetsIsPublicFalse(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -560,7 +626,7 @@ func TestUnpublishAgainKeepsUpdatedAt(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -619,7 +685,7 @@ func TestUnpublishNotFoundLeavesThePattern(t *testing.T) {
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
 	other := testUser(t, s, "user_other")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -681,7 +747,7 @@ func TestUnpublishEmptyDocumentHidesThePattern(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -737,8 +803,7 @@ func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
-	oak := insertMaterial(t, pool, owner, "oak")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -754,28 +819,9 @@ func TestUnpublishLeavesCopiedFromPatternID(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cloneName, err := store.ParseName("Stool")
+	clone, err := s.AddPattern(ctx, owner, patternID)
 	if err != nil {
 		t.Fatal(err)
-	}
-	clone, err := s.Save(ctx, owner, store.CreateDraft{
-		Name:        cloneName,
-		Description: "kept",
-		Document:    testDocument(t, oak),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tag, err := pool.Exec(ctx, `
-		UPDATE designs
-		SET copied_from_pattern_id = $2
-		WHERE id = $1 AND copied_from_design_id IS NULL
-	`, clone.ID.String(), patternID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tag.RowsAffected() != 1 {
-		t.Fatalf("updated rows = %d", tag.RowsAffected())
 	}
 	beforeID, beforeDocument, beforeUpdated := readCopyColumns(t, pool, clone.ID)
 
@@ -800,8 +846,8 @@ func TestPublishAfterUnpublishRefreshesTheDocument(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
-	oak := insertMaterial(t, pool, owner, "oak")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	oak := insertSystemMaterial(t, pool, "test oak")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)
@@ -875,7 +921,7 @@ func TestUnpublishReturnsNotFoundWhenDeleteCommitsUnderTheLock(t *testing.T) {
 	s := store.New(pool)
 	ctx := context.Background()
 	owner := testUser(t, s, "user_owner")
-	pine := insertMaterial(t, pool, owner, "pine")
+	pine := insertSystemMaterial(t, pool, "test pine")
 	name, err := store.ParseName("Bench")
 	if err != nil {
 		t.Fatal(err)

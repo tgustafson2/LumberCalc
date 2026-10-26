@@ -103,6 +103,37 @@ func (q *Queries) ListPublicPatterns(ctx context.Context) ([]ListPublicPatternsR
 	return items, nil
 }
 
+const lockPublicPattern = `-- name: LockPublicPattern :one
+SELECT id, name, description, schema_version, document
+FROM patterns
+WHERE id = $1
+  AND is_public
+FOR KEY SHARE
+`
+
+type LockPublicPatternRow struct {
+	ID            pgtype.UUID
+	Name          string
+	Description   string
+	SchemaVersion int32
+	Document      json.RawMessage
+}
+
+// FOR KEY SHARE blocks a delete of the row until commit, so the copied_from_pattern_id
+// foreign key cannot fail. It does not block publish or unpublish, which change no key column.
+func (q *Queries) LockPublicPattern(ctx context.Context, id pgtype.UUID) (LockPublicPatternRow, error) {
+	row := q.db.QueryRow(ctx, lockPublicPattern, id)
+	var i LockPublicPatternRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.SchemaVersion,
+		&i.Document,
+	)
+	return i, err
+}
+
 const setPatternPrivate = `-- name: SetPatternPrivate :one
 UPDATE patterns
 SET is_public = false

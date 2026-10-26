@@ -371,7 +371,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/PublishedPattern"
         "400":
-          description: The request has a body, or the design has zero pieces.
+          description: The request has a body, the design has zero pieces (empty_design), or the design names a material that is not a system material (custom_material).
           content:
             application/json:
               schema:
@@ -517,6 +517,65 @@ paths:
                 $ref: "#/components/schemas/Error"
         "500":
           description: The pattern was not loaded.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/patterns/{id}/add:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: addPattern
+      tags: [v1]
+      responses:
+        "201":
+          description: A new design that the caller owns. It has the pattern name, description, and document, new piece and connection ids, and version 1.
+          headers:
+            Location:
+              required: true
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Design"
+        "400":
+          description: The request has a body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: The request has no valid session.
+          headers:
+            WWW-Authenticate:
+              required: true
+              schema:
+                type: string
+                enum: [Bearer]
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: The id is not a uuid, no pattern has this id, or the pattern is private. This includes the publisher.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: The pattern names a material the caller cannot use. The error is material not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: The pattern was not added.
           content:
             application/json:
               schema:

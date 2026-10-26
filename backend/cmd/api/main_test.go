@@ -58,6 +58,9 @@ func TestHealthAndReadyStayPublicWhileV1RequiresASession(t *testing.T) {
 		GetPattern: func(context.Context, store.UserID, store.PatternID) (store.Pattern, error) {
 			return store.Pattern{}, store.ErrPatternNotFound
 		},
+		AddPattern: func(context.Context, store.UserID, store.PatternID) (store.Design, error) {
+			return store.Design{}, store.ErrPatternNotFound
+		},
 		CreateMaterial: func(context.Context, store.UserID, store.MaterialInput) (store.Material, error) {
 			return store.Material{}, store.ErrMaterialNotFound
 		},

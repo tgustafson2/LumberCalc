@@ -44,6 +44,7 @@ type exchange struct {
 	unpublish      func(context.Context, store.UserID, store.DesignID) (store.PatternID, error)
 	listPatterns   func(context.Context) ([]store.PatternSummary, error)
 	getPattern     func(context.Context, store.UserID, store.PatternID) (store.Pattern, error)
+	addPattern     func(context.Context, store.UserID, store.PatternID) (store.Design, error)
 	createMaterial func(context.Context, store.UserID, store.MaterialInput) (store.Material, error)
 	listMaterials  func(context.Context, store.UserID) ([]store.Material, error)
 	updateMaterial func(context.Context, store.UserID, store.MaterialID, store.MaterialInput) (store.Material, error)
@@ -219,6 +220,16 @@ var exchanges = map[string][]exchange{
 			},
 		},
 		{
+			name:         "custom material",
+			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
+			validRequest: true,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			publish: func(context.Context, store.UserID, store.DesignID, store.PublicName) (store.PatternID, error) {
+				return store.PatternID{}, store.ErrCustomMaterial
+			},
+		},
+		{
 			name:         "clerk down",
 			path:         "/v1/designs/00000000-0000-4000-8000-000000000001/publish",
 			validRequest: true,
@@ -321,6 +332,48 @@ var exchanges = map[string][]exchange{
 			path:   "/v1/patterns/not-a-uuid",
 			status: http.StatusNotFound,
 			auth:   func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+	},
+	"addPattern": {
+		{
+			name:         "added",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa/add",
+			validRequest: true,
+			status:       http.StatusCreated,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			addPattern: func(context.Context, store.UserID, store.PatternID) (store.Design, error) {
+				return sampleDesign(1), nil
+			},
+		},
+		{
+			name:         "body",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa/add",
+			body:         `{}`,
+			validRequest: false,
+			status:       http.StatusBadRequest,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:         "hidden",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa/add",
+			validRequest: true,
+			status:       http.StatusNotFound,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+		},
+		{
+			name:         "unusable material",
+			path:         "/v1/patterns/00000000-0000-4000-8000-0000000000aa/add",
+			validRequest: true,
+			status:       http.StatusConflict,
+			auth:         func(*http.Request) (store.ClerkUserID, error) { return sessionClerk, nil },
+			addPattern: func(context.Context, store.UserID, store.PatternID) (store.Design, error) {
+				return store.Design{}, store.ErrMaterialUnusable
+			},
+		},
+		{
+			name:   "no session",
+			path:   "/v1/patterns/00000000-0000-4000-8000-0000000000aa/add",
+			status: http.StatusUnauthorized,
 		},
 	},
 	"createMaterial": {{
@@ -709,6 +762,12 @@ func newStack(t *testing.T, c exchange) http.Handler {
 			return store.Pattern{}, store.ErrPatternNotFound
 		}
 	}
+	addPattern := c.addPattern
+	if addPattern == nil {
+		addPattern = func(context.Context, store.UserID, store.PatternID) (store.Design, error) {
+			return store.Design{}, store.ErrPatternNotFound
+		}
+	}
 	save := c.save
 	if save == nil {
 		save = func(context.Context, store.UserID, store.Draft) (store.Design, error) {
@@ -818,6 +877,7 @@ func newStack(t *testing.T, c exchange) http.Handler {
 		Unpublish:          unpublishDesign,
 		ListPublicPatterns: listPatterns,
 		GetPattern:         getPattern,
+		AddPattern:         addPattern,
 		CreateMaterial:     createMaterial,
 		ListMaterials:      listMaterials,
 		UpdateMaterial:     updateMaterial,
