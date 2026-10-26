@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const getDesignPublication = `-- name: GetDesignPublication :one
+SELECT id, is_public
+FROM patterns
+WHERE source_design_id = $1
+`
+
+type GetDesignPublicationRow struct {
+	ID       pgtype.UUID
+	IsPublic bool
+}
+
+func (q *Queries) GetDesignPublication(ctx context.Context, sourceDesignID pgtype.UUID) (GetDesignPublicationRow, error) {
+	row := q.db.QueryRow(ctx, getDesignPublication, sourceDesignID)
+	var i GetDesignPublicationRow
+	err := row.Scan(&i.ID, &i.IsPublic)
+	return i, err
+}
+
 const getVisiblePattern = `-- name: GetVisiblePattern :one
 SELECT p.id, p.name, p.description, p.publisher_name, p.updated_at,
        p.is_public, p.schema_version, p.document,

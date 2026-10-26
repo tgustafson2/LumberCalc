@@ -1048,6 +1048,80 @@ func designDocumentEquals(t *testing.T, pool *pgxpool.Pool, id store.DesignID, d
 	return same
 }
 
+func TestDesignReadsCarryThePublication(t *testing.T) {
+	pool := dbtest.Migrated(t)
+	s := store.New(pool)
+	ctx := context.Background()
+	owner := testUser(t, s, "user_owner")
+	stranger := testUser(t, s, "user_stranger")
+	pine := insertSystemMaterial(t, pool, "test pine")
+	created := savedDesign(t, s, owner, "Bench", pine)
+	if created.Publication != nil {
+		t.Fatalf("created publication = %+v, want nil", created.Publication)
+	}
+	assertPublication(t, s, owner, created.ID, nil)
+
+	patternID, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPublication(t, s, owner, created.ID, &store.Publication{Pattern: patternID, Public: true})
+
+	if _, err := s.Unpublish(ctx, owner, created.ID); err != nil {
+		t.Fatal(err)
+	}
+	assertPublication(t, s, owner, created.ID, &store.Publication{Pattern: patternID, Public: false})
+
+	again, err := s.Publish(ctx, owner, created.ID, store.PublicName{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again != patternID {
+		t.Fatalf("republished id = %s, want %s", again, patternID)
+	}
+	public := &store.Publication{Pattern: patternID, Public: true}
+	assertPublication(t, s, owner, created.ID, public)
+
+	saved, err := s.Save(ctx, owner, store.ReplaceDraft{
+		ID:       created.ID,
+		Name:     mustParseName(t, "Stool"),
+		Document: testDocument(t, pine),
+		Base:     created.Version,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved.Publication == nil || *saved.Publication != *public {
+		t.Fatalf("saved publication = %+v, want %+v", saved.Publication, public)
+	}
+
+	copied, err := s.Copy(ctx, owner, created.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if copied.Publication != nil {
+		t.Fatalf("copy publication = %+v, want nil", copied.Publication)
+	}
+	added, err := s.AddPattern(ctx, stranger, patternID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if added.Publication != nil {
+		t.Fatalf("added publication = %+v, want nil", added.Publication)
+	}
+}
+
+func assertPublication(t *testing.T, s *store.Store, owner store.UserID, id store.DesignID, want *store.Publication) {
+	t.Helper()
+	got, err := s.Get(context.Background(), owner, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if (got.Publication == nil) != (want == nil) || (want != nil && *got.Publication != *want) {
+		t.Fatalf("publication = %+v, want %+v", got.Publication, want)
+	}
+}
+
 type patternRow struct {
 	id            string
 	sourceID      string

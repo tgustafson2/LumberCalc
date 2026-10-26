@@ -55,7 +55,13 @@ type DesignSummary struct {
 
 type Design struct {
 	DesignSummary
-	Document Document
+	Document    Document
+	Publication *Publication
+}
+
+type Publication struct {
+	Pattern PatternID
+	Public  bool
 }
 
 // Draft is one design write. CreateDraft and ReplaceDraft are the only drafts.
@@ -150,7 +156,7 @@ func (s *Store) Save(ctx context.Context, owner UserID, draft Draft) (Design, er
 	if err != nil {
 		return Design{}, err
 	}
-	return designFromRow(row)
+	return readDesign(ctx, s.q, row)
 }
 
 func (s *Store) Get(ctx context.Context, owner UserID, id DesignID) (Design, error) {
@@ -164,7 +170,7 @@ func (s *Store) Get(ctx context.Context, owner UserID, id DesignID) (Design, err
 	if err != nil {
 		return Design{}, err
 	}
-	return designFromRow(row)
+	return readDesign(ctx, s.q, row)
 }
 
 // List returns the caller's live designs, newest first.
@@ -214,14 +220,14 @@ func (s *Store) Publish(ctx context.Context, owner UserID, id DesignID, publishe
 		if err != nil {
 			return err
 		}
-		design, err := designFromRow(locked)
+		_, doc, err := parseDesignRow(locked)
 		if err != nil {
 			return err
 		}
-		if design.Document.empty() {
+		if doc.empty() {
 			return ErrEmptyDesign
 		}
-		bad, err := qtx.FirstNonSystemMaterial(ctx, uuidsPG(design.Document.materialIDs()))
+		bad, err := qtx.FirstNonSystemMaterial(ctx, uuidsPG(doc.materialIDs()))
 		if err == nil {
 			return fmt.Errorf("%w: %s", ErrCustomMaterial, formatUUID(bad.Bytes))
 		}
@@ -303,17 +309,17 @@ func (s *Store) Copy(ctx context.Context, owner UserID, id DesignID) (Design, er
 		if err != nil {
 			return err
 		}
-		source, err := designFromRow(locked)
+		source, doc, err := parseDesignRow(locked)
 		if err != nil {
 			return err
 		}
-		row, err = insertClone(ctx, qtx, owner, copyName(source.Name), source.Description, source.Document, fromDesign(source.ID))
+		row, err = insertClone(ctx, qtx, owner, copyName(source.Name), source.Description, doc, fromDesign(source.ID))
 		return err
 	})
 	if err != nil {
 		return Design{}, err
 	}
-	return designFromRow(row)
+	return readDesign(ctx, s.q, row)
 }
 
 // copyName is the only copy title. Names are not unique, so a repeated copy keeps this title.
@@ -381,16 +387,36 @@ func insertUsages(ctx context.Context, qtx *q.Queries, owner UserID, designID pg
 	return nil
 }
 
-func designFromRow(row q.Design) (Design, error) {
-	summary, err := summaryFromRow(row.ID, row.Name, row.Description, row.Version, row.UpdatedAt)
+func readDesign(ctx context.Context, qq *q.Queries, row q.Design) (Design, error) {
+	summary, doc, err := parseDesignRow(row)
 	if err != nil {
 		return Design{}, err
+	}
+	design := Design{DesignSummary: summary, Document: doc}
+	pub, err := qq.GetDesignPublication(ctx, row.ID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return design, nil
+	}
+	if err != nil {
+		return Design{}, err
+	}
+	if !pub.ID.Valid {
+		return Design{}, errors.New("pattern row is missing id")
+	}
+	design.Publication = &Publication{Pattern: PatternID{v: pub.ID.Bytes}, Public: pub.IsPublic}
+	return design, nil
+}
+
+func parseDesignRow(row q.Design) (DesignSummary, Document, error) {
+	summary, err := summaryFromRow(row.ID, row.Name, row.Description, row.Version, row.UpdatedAt)
+	if err != nil {
+		return DesignSummary{}, Document{}, err
 	}
 	doc, err := parseStored("design", row.Document, row.SchemaVersion)
 	if err != nil {
-		return Design{}, err
+		return DesignSummary{}, Document{}, err
 	}
-	return Design{DesignSummary: summary, Document: doc}, nil
+	return summary, doc, nil
 }
 
 func parseStored(kind string, raw []byte, schemaVersion int32) (Document, error) {

@@ -18,8 +18,8 @@ import (
 const (
 	designID     = "00000000-0000-4000-8000-000000000001"
 	otherID      = "00000000-0000-4000-8000-000000000002"
-	emptyDesign  = `{"description":"","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","updatedAt":"2026-01-02T03:04:05Z","version":1}`
-	secondDesign = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","updatedAt":"2026-01-02T03:04:05Z","version":2}`
+	emptyDesign  = `{"description":"","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","publication":null,"updatedAt":"2026-01-02T03:04:05Z","version":1}`
+	secondDesign = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","publication":null,"updatedAt":"2026-01-02T03:04:05Z","version":2}`
 )
 
 func TestCreateDesignReturns201(t *testing.T) {
@@ -77,6 +77,37 @@ func TestGetDesignReturnsTheDocument(t *testing.T) {
 	}
 	if strings.TrimSpace(rr.Body.String()) != emptyDesign {
 		t.Fatalf("body = %s", rr.Body.String())
+	}
+}
+
+func TestGetDesignWritesThePublication(t *testing.T) {
+	patternID, err := store.ParsePatternID(otherID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name   string
+		public bool
+		want   string
+	}{
+		{name: "public", public: true, want: `"publication":{"isPublic":true,"patternId":"` + otherID + `"}`},
+		{name: "private", public: false, want: `"publication":{"isPublic":false,"patternId":"` + otherID + `"}`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := designHandler(t, nil, func(context.Context, store.UserID, store.DesignID) (store.Design, error) {
+				d := benchDesign(t, mustName(t, "Bench"), "", 1, store.Document{})
+				d.Publication = &store.Publication{Pattern: patternID, Public: tt.public}
+				return d, nil
+			}, nil, nil, nil, nil, nil)
+			rr := callJSON(h, http.MethodGet, "/v1/designs/"+designID, "")
+			if rr.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", rr.Code, rr.Body.String())
+			}
+			if !strings.Contains(rr.Body.String(), tt.want) {
+				t.Fatalf("body = %s", rr.Body.String())
+			}
+		})
 	}
 }
 
@@ -236,7 +267,7 @@ func TestCopyDesignReturns201(t *testing.T) {
 		}
 		return benchDesign(t, mustName(t, "Bench copy"), "cut list", 1, store.Document{}), nil
 	}, nil, nil)
-	const want = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench copy","updatedAt":"2026-01-02T03:04:05Z","version":1}`
+	const want = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench copy","publication":null,"updatedAt":"2026-01-02T03:04:05Z","version":1}`
 	for _, body := range []string{"", " \t\n"} {
 		rr := callJSON(h, http.MethodPost, "/v1/designs/"+designID+"/copy", body)
 		if rr.Code != http.StatusCreated {

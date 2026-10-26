@@ -1050,7 +1050,7 @@ components:
     Design:
       type: object
       additionalProperties: false
-      required: [id, name, description, version, updatedAt, document]
+      required: [id, name, description, version, updatedAt, document, publication]
       properties:
         id:
           type: string
@@ -1069,6 +1069,20 @@ components:
           format: date-time
         document:
           $ref: "#/components/schemas/DesignDocument"
+        publication:
+          type: object
+          x-go-type-name: DesignPublication
+          nullable: true
+          additionalProperties: false
+          required: [patternId, isPublic]
+          description: The pattern published from this design. Null when the design was never published.
+          properties:
+            patternId:
+              type: string
+              format: uuid
+              x-go-type: string
+            isPublic:
+              type: boolean
     PublishedPattern:
       type: object
       additionalProperties: false

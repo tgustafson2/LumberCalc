@@ -112,7 +112,7 @@ func (s *Store) AddPattern(ctx context.Context, owner UserID, id PatternID) (Des
 	if err != nil {
 		return Design{}, err
 	}
-	return designFromRow(row)
+	return readDesign(ctx, s.q, row)
 }
 
 func patternFromRow(row q.GetVisiblePatternRow) (Pattern, error) {

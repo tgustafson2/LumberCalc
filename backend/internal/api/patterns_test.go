@@ -85,7 +85,7 @@ func TestAddPatternReturns201(t *testing.T) {
 		gotOwner, gotID = owner, id
 		return benchDesign(t, mustName(t, "Bench"), "cut list", 1, store.Document{}), nil
 	})
-	const want = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","updatedAt":"2026-01-02T03:04:05Z","version":1}`
+	const want = `{"description":"cut list","document":{"schemaVersion":1,"units":"in","pieces":[],"connections":[]},"id":"` + designID + `","name":"Bench","publication":null,"updatedAt":"2026-01-02T03:04:05Z","version":1}`
 	for _, body := range []string{"", " \t\n"} {
 		rr := callJSON(h, http.MethodPost, "/v1/patterns/"+patternID+"/add", body)
 		if rr.Code != http.StatusCreated {

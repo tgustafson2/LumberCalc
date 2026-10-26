@@ -30,6 +30,11 @@ SET is_public = false
 WHERE source_design_id = sqlc.arg('source_design_id')
 RETURNING id;
 
+-- name: GetDesignPublication :one
+SELECT id, is_public
+FROM patterns
+WHERE source_design_id = sqlc.arg('source_design_id');
+
 -- name: LockPublicPattern :one
 -- FOR KEY SHARE blocks a delete of the row until commit, so the copied_from_pattern_id
 -- foreign key cannot fail. It does not block publish or unpublish, which change no key column.

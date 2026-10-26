@@ -33,11 +33,20 @@ type Design struct {
 	Description string `json:"description"`
 
 	// Document A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees.
-	Document  DesignDocument `json:"document"`
-	Id        string         `json:"id"`
-	Name      string         `json:"name"`
-	UpdatedAt time.Time      `json:"updatedAt"`
-	Version   int            `json:"version"`
+	Document DesignDocument `json:"document"`
+	Id       string         `json:"id"`
+	Name     string         `json:"name"`
+
+	// Publication The pattern published from this design. Null when the design was never published.
+	Publication *DesignPublication `json:"publication"`
+	UpdatedAt   time.Time          `json:"updatedAt"`
+	Version     int                `json:"version"`
+}
+
+// DesignPublication The pattern published from this design. Null when the design was never published.
+type DesignPublication struct {
+	IsPublic  bool   `json:"isPublic"`
+	PatternId string `json:"patternId"`
 }
 
 // DesignDocument A design at schema version 1. Lengths are inches. Rotation is Euler XYZ in degrees.

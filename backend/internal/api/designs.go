@@ -309,6 +309,10 @@ func designStatus(err error) int {
 }
 
 func toDesign(d store.Design) Design {
+	var publication *DesignPublication
+	if p := d.Publication; p != nil {
+		publication = &DesignPublication{PatternId: p.Pattern.String(), IsPublic: p.Public}
+	}
 	return Design{
 		Id:          d.ID.String(),
 		Name:        d.Name.String(),
@@ -316,6 +320,7 @@ func toDesign(d store.Design) Design {
 		Version:     int(d.Version),
 		UpdatedAt:   d.UpdatedAt,
 		Document:    d.Document,
+		Publication: publication,
 	}
 }
 
