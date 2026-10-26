@@ -221,14 +221,7 @@ func TestAddPatternWithACustomMaterialInsertsNoDesign(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(testDocument(t, pine, custom))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Publish rejects a custom material, so this snapshot is only a legacy row.
-	if _, err := pool.Exec(ctx, `UPDATE patterns SET document = $2 WHERE id = $1`, patternID.String(), raw); err != nil {
-		t.Fatal(err)
-	}
+	writeLegacyPatternDocument(t, pool, patternID, testDocument(t, pine, custom))
 
 	if _, err := s.AddPattern(ctx, stranger, patternID); !errors.Is(err, store.ErrMaterialUnusable) {
 		t.Fatalf("stranger err = %v, want ErrMaterialUnusable", err)
@@ -245,6 +238,21 @@ func TestAddPatternWithACustomMaterialInsertsNoDesign(t *testing.T) {
 	sort.Strings(wantUsages)
 	if usages := usageMaterialIDs(t, pool, clone.ID); !sameStrings(usages, wantUsages) {
 		t.Fatalf("publisher usages = %v, want %v", usages, wantUsages)
+	}
+}
+
+func writeLegacyPatternDocument(t *testing.T, pool *pgxpool.Pool, id store.PatternID, doc store.Document) {
+	t.Helper()
+	raw, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tag, err := pool.Exec(context.Background(), `UPDATE patterns SET document = $2 WHERE id = $1`, id.String(), raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatalf("updated rows = %d", tag.RowsAffected())
 	}
 }
 

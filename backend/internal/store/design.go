@@ -79,12 +79,11 @@ func (CreateDraft) draftKind()  {}
 func (ReplaceDraft) draftKind() {}
 
 var (
-	ErrNotFound    = errors.New("design not found")
-	ErrBadDesignID = errors.New("design id is not a uuid")
-	ErrBlankName   = errors.New("design name is blank")
-	ErrStale       = errors.New("stale version")
-	ErrEmptyDesign = errors.New("empty design")
-	// ErrCustomMaterial is a publish of a document that names a material that is not a system material.
+	ErrNotFound       = errors.New("design not found")
+	ErrBadDesignID    = errors.New("design id is not a uuid")
+	ErrBlankName      = errors.New("design name is blank")
+	ErrStale          = errors.New("stale version")
+	ErrEmptyDesign    = errors.New("empty design")
 	ErrCustomMaterial = errors.New("design names a material that is not a system material")
 )
 
@@ -323,8 +322,6 @@ func copyName(source Name) Name {
 	return Name{s: source.s + " copy"}
 }
 
-// cloneSource is the one lineage column that a cloned design sets.
-// fromDesign and fromPattern are the only sources, so a clone never sets both columns.
 type cloneSource interface {
 	copiedFrom() (design, pattern pgtype.UUID)
 }
@@ -340,9 +337,6 @@ func (s fromPattern) copiedFrom() (design, pattern pgtype.UUID) {
 	return pgtype.UUID{}, uuidPG(s.v)
 }
 
-// insertClone writes a version 1 design that owner owns, with new piece and connection ids,
-// and its usage rows, in the transaction of qtx.
-// A material that owner cannot use is ErrMaterialUnusable. The caller's transaction then rolls back.
 func insertClone(ctx context.Context, qtx *q.Queries, owner UserID, name Name, description string, source Document, from cloneSource) (q.Design, error) {
 	cloned, err := source.fork()
 	if err != nil {
@@ -400,9 +394,6 @@ func designFromRow(row q.Design) (Design, error) {
 	return Design{DesignSummary: summary, Document: doc}, nil
 }
 
-// parseStored parses a document that the store wrote earlier.
-// A document that does not parse, or a schema_version that does not match, is a server fault.
-// The error does not wrap DocumentError, because the handler maps that type to 400.
 func parseStored(kind string, raw []byte, schemaVersion int32) (Document, error) {
 	var doc Document
 	if err := json.Unmarshal(raw, &doc); err != nil {

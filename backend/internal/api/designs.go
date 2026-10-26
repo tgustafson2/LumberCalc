@@ -132,8 +132,6 @@ func (a *API) copyDesign(w http.ResponseWriter, r *http.Request, c Caller) {
 	writeCreatedDesign(w, design)
 }
 
-// writeCreatedDesign is the one 201 response for a new design.
-// Location is the path of that design.
 func writeCreatedDesign(w http.ResponseWriter, d store.Design) {
 	w.Header().Set("Location", "/v1/designs/"+d.ID.String())
 	server.WriteJSON(w, http.StatusCreated, toDesign(d))

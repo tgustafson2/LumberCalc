@@ -150,19 +150,7 @@ func TestGetPatternSendsOnlySystemMaterialIDs(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	// Publish rejects a custom material, so a mixed snapshot is only a legacy row.
-	tag, err := pool.Exec(ctx, `
-		UPDATE patterns p
-		SET document = d.document
-		FROM designs d
-		WHERE p.id = $1 AND d.id = p.source_design_id
-	`, patternID.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if tag.RowsAffected() != 1 {
-		t.Fatalf("updated rows = %d", tag.RowsAffected())
-	}
+	writeLegacyPatternDocument(t, pool, patternID, testDocument(t, system, private))
 
 	got, err := s.GetPattern(ctx, stranger, patternID)
 	if err != nil {
